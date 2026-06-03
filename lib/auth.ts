@@ -2,7 +2,17 @@ import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { MongoClient } from "mongodb";
 
-const client = new MongoClient(process.env.MONGODB_URI!);
+const mongodbUri = process.env.MONGODB_URI;
+
+if (!mongodbUri) {
+    if (process.env.NODE_ENV === "development" || process.env.BETTER_AUTH_CLI) {
+        console.warn("MONGODB_URI is not defined. Better Auth might fail if database access is required.");
+    } else {
+        throw new Error("MONGODB_URI is not defined");
+    }
+}
+
+const client = new MongoClient(mongodbUri || "mongodb://localhost:27017/unused");
 const db = client.db();
 
 export const auth = betterAuth({
@@ -15,12 +25,15 @@ export const auth = betterAuth({
             role: {
                 type: "string",
                 defaultValue: "STAFF",
-                input: true // allow user to provide role on sign up if needed, or manage via admin
             },
             businessId: {
-                type: "string", // store as string ID
-                input: true
+                type: "string",
             }
         }
+    },
+    // Required for the client-side to see these fields
+    session: {
+        expiresIn: 60 * 60 * 24 * 7, // 1 week
+        updateAge: 60 * 60 * 24 // 1 day
     }
 });
