@@ -2,6 +2,7 @@ import { customerRepository } from '@/repositories/customer.repository';
 import { appleDeviceRepository } from '@/repositories/apple-device.repository';
 import { businessRepository } from '@/repositories/business.repository';
 import { sendAppleWalletPush } from '@/lib/apple-push';
+import { updateGoogleWalletObject } from '@/lib/google-wallet';
 import Visit from '@/models/Visit';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
@@ -39,13 +40,21 @@ export const visitService = {
       } as any),
     ]);
 
-    // Fire-and-forget APNs push — non-critical
-    appleDeviceRepository
-      .findBySerialNumber(customerId)
-      .then((devices) =>
-        Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken)))
-      )
-      .catch((err) => console.error('APNs push error:', err));
+    // Get updated customer for wallet sync
+    const updatedCustomer = await customerRepository.findById(customerId, businessId);
+
+    // Fire-and-forget wallet updates — non-critical
+    if (updatedCustomer) {
+      appleDeviceRepository
+        .findBySerialNumber(customerId)
+        .then((devices) =>
+          Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken)))
+        )
+        .catch((err) => console.error('APNs push error:', err));
+
+      updateGoogleWalletObject(updatedCustomer, business)
+        .catch((err) => console.error('Google Wallet update error:', err));
+    }
 
     return {
       earnedReward,

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ScanLine } from "lucide-react";
 
 export default function RecordVisitButton({ customerId }: { customerId: string }) {
   const [loading, setLoading] = useState(false);
@@ -22,8 +23,8 @@ export default function RecordVisitButton({ customerId }: { customerId: string }
 
       setMessage({
         text: data.earnedReward
-          ? "¡Visita registrada! El cliente ganó su premio."
-          : `Visita registrada. ${data.currentVisits} visitas actuales.`,
+          ? "¡Premio ganado! Reiniciando contador."
+          : `Visita ${data.currentVisits} registrada.`,
         type: "success",
       });
       router.refresh();
@@ -35,16 +36,17 @@ export default function RecordVisitButton({ customerId }: { customerId: string }
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col items-end gap-2 shrink-0">
       <button
         onClick={handleClick}
         disabled={loading}
-        className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+        className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-50 transition-colors"
       >
+        <ScanLine size={16} />
         {loading ? "Registrando..." : "Registrar Visita"}
       </button>
       {message && (
-        <p className={`text-sm ${message.type === "success" ? "text-green-600" : "text-red-600"}`}>
+        <p className={`text-xs font-medium ${message.type === "success" ? "text-emerald-600" : "text-red-500"}`}>
           {message.text}
         </p>
       )}
