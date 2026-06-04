@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
 import {
   Home, Users, Settings, UserCog, Gift,
-  ShoppingCart, Monitor, Package,
-  BarChart3, FileText, Truck,
+  ShoppingCart, Monitor, Package, ClipboardList,
+  BarChart3, FileText, Truck, UtensilsCrossed,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -43,9 +43,18 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard" icon={Home} label="Inicio" />
           )}
 
-          {/* Everyone */}
+          {/* Everyone — POS first since it's the daily tool */}
+          <NavLink href="/dashboard/pos" icon={ShoppingCart} label="POS — Mesas" />
           <NavLink href="/dashboard/customers" icon={Users} label="Clientes" />
           <NavLink href="/dashboard/loyalty" icon={Gift} label="Fidelización" />
+
+          {/* Owner / Admin — menu management + orders */}
+          {canSeeAnalytics && (
+            <NavLink href="/dashboard/menu" icon={UtensilsCrossed} label="Menú" />
+          )}
+          {canSeeAnalytics && (
+            <NavLink href="/dashboard/orders" icon={ClipboardList} label="Historial" />
+          )}
 
           {/* Owner only */}
           {isOwner && (
@@ -57,7 +66,6 @@ export default async function DashboardLayout({
             <p className="text-[0.65rem] font-bold uppercase tracking-wider text-gray-300">Próximamente</p>
           </div>
           {[
-            { icon: ShoppingCart, label: "POS & Pagos" },
             { icon: Monitor, label: "Cocina (KDS)" },
             { icon: Package, label: "Inventario" },
             ...(canSeeAnalytics

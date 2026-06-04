@@ -5,13 +5,17 @@ import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
 import AddStaffForm from "@/components/dashboard/AddStaffForm";
 import RemoveStaffButton from "@/components/dashboard/RemoveStaffButton";
+import StaffFilterBar from "@/components/filters/StaffFilterBar";
 import { Shield, Users } from "lucide-react";
+import Link from "next/link";
 
 const ROLE_LABELS: Record<string, { label: string; className: string }> = {
   OWNER:  { label: "Dueño",   className: "bg-emerald-50 text-emerald-700 border-emerald-100" },
   ADMIN:  { label: "Gerente", className: "bg-blue-50 text-blue-700 border-blue-100" },
   STAFF:  { label: "Empleado",className: "bg-gray-100 text-gray-600 border-gray-200" },
 };
+
+type RoleFilter = "all" | "ADMIN" | "STAFF";
 
 async function getStaff(businessId: string, ownerId: string) {
   await dbConnect();
@@ -33,13 +37,32 @@ async function getStaff(businessId: string, ownerId: string) {
   }));
 }
 
-export default async function StaffPage() {
+export default async function StaffPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string; role?: string }>;
+}) {
   const session = await auth.api.getSession({ headers: await headers() });
 
   if (!session) redirect("/login");
   if (session.user.role !== "OWNER") redirect("/dashboard");
 
-  const staff = await getStaff(session.user.businessId, session.user.id);
+  const sp = await searchParams;
+  const search = (sp.search || "").toLowerCase();
+  const roleFilter = (sp.role || "all") as RoleFilter;
+
+  let staff = await getStaff(session.user.businessId, session.user.id);
+
+  // Apply filters
+  if (search) {
+    staff = staff.filter((s) =>
+      s.name.toLowerCase().includes(search) || s.email.toLowerCase().includes(search)
+    );
+  }
+
+  if (roleFilter !== "all") {
+    staff = staff.filter((s) => s.role === roleFilter);
+  }
 
   return (
     <div className="space-y-6">
@@ -75,6 +98,9 @@ export default async function StaffPage() {
         })}
       </div>
 
+      {/* Filters */}
+      <StaffFilterBar search={search} roleFilter={roleFilter} />
+
       {/* Staff list */}
       <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
         {/* Owner row */}
@@ -97,8 +123,8 @@ export default async function StaffPage() {
             <div className="w-12 h-12 rounded-2xl bg-gray-100 text-gray-300 flex items-center justify-center mb-3">
               <Users size={24} />
             </div>
-            <p className="text-sm font-semibold text-gray-900">Sin empleados aún</p>
-            <p className="text-xs text-gray-400 mt-1">Agrega tu primer empleado para empezar a delegar accesos.</p>
+            <p className="text-sm font-semibold text-gray-900">Sin empleados con estos filtros</p>
+            <p className="text-xs text-gray-400 mt-1">Ajusta los filtros o agrega un nuevo empleado.</p>
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">

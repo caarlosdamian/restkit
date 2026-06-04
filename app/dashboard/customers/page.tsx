@@ -1,10 +1,17 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { customerService } from "@/services/customer.service";
+import CustomersFilterBar from "@/components/filters/CustomersFilterBar";
 import Link from "next/link";
-import { Users, UserPlus, ChevronRight } from "lucide-react";
+import { Users, UserPlus } from "lucide-react";
 
-export default async function CustomersPage() {
+type RewardFilter = "all" | "no-reward" | "at-reward";
+
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string; reward?: string }>;
+}) {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -13,10 +20,29 @@ export default async function CustomersPage() {
     return <div>No se encontró configuración de negocio para este usuario.</div>;
   }
 
-  const customers = await customerService.getAllCustomers(session.user.businessId);
+  const sp = await searchParams;
+  const search = (sp.search || "").toLowerCase();
+  const rewardFilter = (sp.reward || "all") as RewardFilter;
+
+  let customers = await customerService.getAllCustomers(session.user.businessId);
+
+  // Apply filters
+  if (search) {
+    customers = customers.filter((c) =>
+      c.name.toLowerCase().includes(search) ||
+      c.email?.toLowerCase().includes(search) ||
+      c.phone?.toLowerCase().includes(search)
+    );
+  }
+
+  if (rewardFilter === "no-reward") {
+    customers = customers.filter((c) => c.stats.currentVisits === 0);
+  } else if (rewardFilter === "at-reward") {
+    customers = customers.filter((c) => c.stats.currentVisits > 0);
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -34,6 +60,9 @@ export default async function CustomersPage() {
         </Link>
       </div>
 
+      {/* Filters */}
+      <CustomersFilterBar search={search} rewardFilter={rewardFilter} />
+
       {/* Customer list */}
       <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
         {customers.length === 0 ? (
@@ -41,8 +70,8 @@ export default async function CustomersPage() {
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mb-4">
               <Users size={28} />
             </div>
-            <p className="text-base font-semibold text-gray-900">Sin clientes aún</p>
-            <p className="text-sm text-gray-500 mt-1">Agrega tu primer cliente para empezar.</p>
+            <p className="text-base font-semibold text-gray-900">Sin clientes con estos filtros</p>
+            <p className="text-sm text-gray-500 mt-1">Ajusta los filtros o agrega un nuevo cliente.</p>
             <Link
               href="/dashboard/customers/new"
               className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors"
@@ -96,8 +125,6 @@ export default async function CustomersPage() {
                       <p className="text-sm font-bold text-gray-900">{customer.stats.totalVisits}</p>
                       <p className="text-xs text-gray-400">total</p>
                     </div>
-
-                    <ChevronRight size={16} className="text-gray-300 group-hover:text-emerald-500 transition-colors shrink-0" />
                   </Link>
                 </li>
               );
