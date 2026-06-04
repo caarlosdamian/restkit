@@ -12,6 +12,7 @@ export interface ICustomer extends Document {
   };
   externalIds: {
     applePassId?: string;
+    appleAuthToken?: string;
     googlePassId?: string;
   };
   createdAt: Date;
@@ -36,6 +37,7 @@ const CustomerSchema: Schema = new Schema(
     },
     externalIds: {
       applePassId: { type: String },
+      appleAuthToken: { type: String },
       googlePassId: { type: String },
     },
   },

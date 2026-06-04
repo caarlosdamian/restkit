@@ -1,6 +1,6 @@
 import { customerRepository } from "@/repositories/customer.repository";
 import dbConnect from "@/lib/db";
-import { ICustomer } from "@/models/Customer";
+import { randomBytes } from "crypto";
 
 export const customerService = {
   async getAllCustomers(businessId: string) {
@@ -13,11 +13,8 @@ export const customerService = {
     return await customerRepository.create({
       ...data,
       businessId: businessId as any,
-      stats: {
-        totalVisits: 0,
-        currentVisits: 0,
-        points: 0
-      }
+      stats: { totalVisits: 0, currentVisits: 0, points: 0 },
+      externalIds: { appleAuthToken: randomBytes(20).toString('hex') },
     });
   },
 
