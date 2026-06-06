@@ -35,17 +35,19 @@ export async function POST(req: Request) {
 
   if (!tableId) return NextResponse.json({ error: 'tableId requerido' }, { status: 400 });
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+
   // Verify table belongs to business
   const table = await Table.findOne({
-    _id: tableId,
-    businessId: session.user.businessId,
+    _id: new mongoose.Types.ObjectId(tableId),
+    businessId,
   });
   if (!table) return NextResponse.json({ error: 'Mesa no encontrada' }, { status: 404 });
 
   // Ensure no active order exists for this table
   const existing = await Order.findOne({
-    tableId,
-    businessId: session.user.businessId,
+    tableId: new mongoose.Types.ObjectId(tableId),
+    businessId,
     status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] },
   });
   if (existing) return NextResponse.json(existing);
@@ -56,10 +58,10 @@ export async function POST(req: Request) {
   );
 
   const order = await Order.create({
-    tableId,
+    tableId: new mongoose.Types.ObjectId(tableId),
     tableName: table.name || `Mesa ${table.number}`,
-    businessId: session.user.businessId,
-    staffId: session.user.id,
+    businessId,
+    staffId: new mongoose.Types.ObjectId(session.user.id),
     items: items ?? [],
     total,
   });

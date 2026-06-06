@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import Order, { IOrderItem } from '@/models/Order';
 import Table from '@/models/Table';
 import dbConnect from '@/lib/db';
+import mongoose from 'mongoose';
 
 type Params = Promise<{ orderId: string }>;
 
@@ -13,7 +14,8 @@ export async function GET(_req: Request, { params }: { params: Params }) {
 
   await dbConnect();
   const { orderId } = await params;
-  const order = await Order.findOne({ _id: orderId, businessId: session.user.businessId });
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+  const order = await Order.findOne({ _id: new mongoose.Types.ObjectId(orderId), businessId });
   if (!order) return NextResponse.json({ error: 'Orden no encontrada' }, { status: 404 });
   return NextResponse.json(order);
 }
@@ -26,7 +28,8 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   const { orderId } = await params;
   const body = await req.json();
 
-  const order = await Order.findOne({ _id: orderId, businessId: session.user.businessId });
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+  const order = await Order.findOne({ _id: new mongoose.Types.ObjectId(orderId), businessId });
   if (!order) return NextResponse.json({ error: 'Orden no encontrada' }, { status: 404 });
 
   if (body.items !== undefined) {
@@ -48,10 +51,10 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
         order.amountReceived = Number(body.amountReceived);
         order.change = Math.max(0, Number(body.amountReceived) - order.total);
       }
-      // Unassign table from staff when order is paid
+      // Clear staff from table when order is paid
       await Table.updateOne(
         { _id: order.tableId },
-        { $set: { assignedStaffId: null } }
+        { $unset: { assignedStaffId: '' } }
       );
     }
     if (body.status === 'CANCELLED') order.closedAt = new Date();

@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import Product from '@/models/Product';
 import dbConnect from '@/lib/db';
+import mongoose from 'mongoose';
 
 type Params = Promise<{ productId: string }>;
 
@@ -16,8 +17,9 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   const { productId } = await params;
   const body = await req.json();
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   const product = await Product.findOneAndUpdate(
-    { _id: productId, businessId: session.user.businessId },
+    { _id: new mongoose.Types.ObjectId(productId), businessId },
     { $set: body },
     { new: true }
   );
@@ -35,6 +37,7 @@ export async function DELETE(_req: Request, { params }: { params: Params }) {
   await dbConnect();
   const { productId } = await params;
 
-  await Product.findOneAndDelete({ _id: productId, businessId: session.user.businessId });
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+  await Product.findOneAndDelete({ _id: new mongoose.Types.ObjectId(productId), businessId });
   return NextResponse.json({ success: true });
 }

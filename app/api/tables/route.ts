@@ -55,11 +55,12 @@ export async function POST(req: Request) {
 
   if (!number) return NextResponse.json({ error: 'El número de mesa es requerido' }, { status: 400 });
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   const table = await Table.create({
     number,
     name: name || `Mesa ${number}`,
     capacity: capacity || 4,
-    businessId: session.user.businessId,
+    businessId,
   });
 
   return NextResponse.json(table, { status: 201 });

@@ -47,7 +47,7 @@ export default function StaffPosPage() {
 
   useEffect(() => {
     // Get staff session from localStorage
-    const session = localStorage.getItem("staffSession");
+    const session = window.localStorage.getItem("staffSession");
     if (!session) {
       router.push("/dashboard/pos/staff-login");
       return;

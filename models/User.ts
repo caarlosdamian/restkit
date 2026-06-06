@@ -11,7 +11,7 @@ export interface IUser extends Document {
   email: string;
   password?: string;
   role: UserRole;
-  businessId: mongoose.Types.ObjectId;
+  businessId: string; // Store as string to match Better Auth format
   image?: string;
   emailVerified?: Date;
   employeeNumber?: string;
@@ -30,8 +30,7 @@ const UserSchema: Schema = new Schema(
       default: UserRole.STAFF,
     },
     businessId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Business',
+      type: String, // Store as string (Better Auth format: business ObjectId as string)
       required: true,
       index: true,
     },

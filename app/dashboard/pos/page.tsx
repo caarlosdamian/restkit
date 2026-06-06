@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Users, LayoutGrid } from "lucide-react";
 import AddTableButton from "@/components/pos/AddTableButton";
 import TablesFilterBar from "@/components/filters/TablesFilterBar";
+import POSPageWrapper from "@/components/pos/POSPageWrapper";
 
 type OrderStatus = "OPEN" | "IN_KITCHEN" | "READY";
 type StatusFilter = "all" | "available" | "occupied";
@@ -99,7 +100,12 @@ export default async function PosPage({
   const occupied = tables.filter((t) => t.activeOrder).length;
 
   return (
-    <div className="space-y-6">
+    <POSPageWrapper
+      userRole={session.user.role}
+      employeeNumber={session.user.employeeNumber}
+      userName={session.user.name}
+    >
+      <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -287,6 +293,7 @@ export default async function PosPage({
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </POSPageWrapper>
   );
 }

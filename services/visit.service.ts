@@ -37,21 +37,23 @@ export const visitService = {
           currentVisits: earnedReward ? 0 : newCurrent,
           points: customer.stats.points + 1,
         },
-      } as any),
+      }),
     ]);
 
     // Get updated customer for wallet sync
     const updatedCustomer = await customerRepository.findById(customerId, businessId);
 
     // Fire-and-forget wallet updates — non-critical
-    if (updatedCustomer) {
+    if (updatedCustomer?.externalIds?.applePassId) {
       appleDeviceRepository
-        .findBySerialNumber(customerId)
+        .findBySerialNumber(updatedCustomer.externalIds.applePassId)
         .then((devices) =>
           Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken)))
         )
         .catch((err) => console.error('APNs push error:', err));
+    }
 
+    if (updatedCustomer) {
       updateGoogleWalletObject(updatedCustomer, business)
         .catch((err) => console.error('Google Wallet update error:', err));
     }

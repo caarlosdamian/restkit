@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search } from "lucide-react";
 import PaymentModal from "./PaymentModal";
@@ -55,6 +55,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export default function OrderBuilder({ tableId, tableName, businessName, staffName, ticketConfig = {}, products, initialOrder }: OrderBuilderProps) {
   const router = useRouter();
+  const [sessionValid, setSessionValid] = useState(true);
   const [orderId, setOrderId]   = useState(initialOrder?._id ?? null);
   const [status, setStatus]     = useState(initialOrder?.status ?? "OPEN");
   const [items, setItems]       = useState<OrderItem[]>(initialOrder?.items ?? []);
@@ -64,6 +65,26 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   const [search, setSearch]     = useState("");
   const [activeTab, setActiveTab] = useState<"menu" | "order">("menu");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Check if POS session is open
+  useEffect(() => {
+    checkPOSSession();
+  }, []);
+
+  async function checkPOSSession() {
+    try {
+      const res = await fetch("/api/pos-session/current");
+      if (res.ok) {
+        const data = await res.json();
+        if (!data.session) {
+          setSessionValid(false);
+          router.push("/dashboard/pos");
+        }
+      }
+    } catch (err) {
+      console.error("Error checking POS session:", err);
+    }
+  }
 
   // Track what was last sent to the kitchen so we can highlight new additions
   const [kitchenSnapshot, setKitchenSnapshot] = useState<Map<string, number>>(
@@ -203,13 +224,26 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
 
   // ── render ────────────────────────────────────────────────────────────────
 
+  if (!sessionValid) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center">
+        <p className="text-gray-500">Validando sesión...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-4 mb-5">
         <button
-          onClick={() => router.push("/dashboard/pos")}
+          onClick={() => {
+            const waiterSession = window.localStorage.getItem("waiterSession");
+            const redirectUrl = waiterSession ? "/dashboard/pos/waiter-lobby" : "/dashboard/pos";
+            router.push(redirectUrl);
+          }}
           className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
+          title="Volver"
         >
           <ArrowLeft size={18} />
         </button>

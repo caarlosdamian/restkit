@@ -35,7 +35,7 @@ export default function RegistroPage() {
       });
 
       if (authError) {
-        setError(authError.message);
+        setError(authError.message || "Error en la autenticación");
         return;
       }
 
@@ -52,7 +52,9 @@ export default function RegistroPage() {
         });
 
         if (!res.ok) {
-          setError("Usuario creado pero error al crear el negocio.");
+          const errorData = await res.json();
+          console.error("Business creation error:", errorData);
+          setError(`Usuario creado pero error al crear el negocio: ${errorData.error || 'Error desconocido'}`);
           return;
         }
       }

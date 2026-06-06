@@ -3,14 +3,16 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import Product from '@/models/Product';
 import dbConnect from '@/lib/db';
+import mongoose from 'mongoose';
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.businessId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   const products = await Product.find({
-    businessId: session.user.businessId,
+    businessId,
   }).sort({ category: 1, sortOrder: 1, name: 1 });
 
   return NextResponse.json(products);
@@ -29,12 +31,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Nombre y precio son requeridos' }, { status: 400 });
   }
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   const product = await Product.create({
     name,
     description,
     price: Number(price),
     category: category || 'General',
-    businessId: session.user.businessId,
+    businessId,
     isAvailable: isAvailable !== false,
   });
 

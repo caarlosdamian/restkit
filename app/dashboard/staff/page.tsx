@@ -32,6 +32,7 @@ async function getStaff(businessId: string, ownerId: string) {
     id: s._id.toString(),
     name: s.name as string,
     email: s.email as string,
+    employeeNumber: s.employeeNumber as string | undefined,
     role: (s.role as string) ?? "STAFF",
     createdAt: s.createdAt as Date,
   }));
@@ -136,7 +137,14 @@ export default async function StaffPage({
                     {s.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{s.name}</p>
+                      {s.employeeNumber && (
+                        <span className="text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                          #{s.employeeNumber}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400 truncate">{s.email}</p>
                   </div>
                   <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full border ${badge.className}`}>

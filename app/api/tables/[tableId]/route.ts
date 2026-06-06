@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import Table from '@/models/Table';
 import dbConnect from '@/lib/db';
+import mongoose from 'mongoose';
 
 type Params = Promise<{ tableId: string }>;
 
@@ -16,8 +17,9 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   const { tableId } = await params;
   const body = await req.json();
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   const table = await Table.findOneAndUpdate(
-    { _id: tableId, businessId: session.user.businessId },
+    { _id: new mongoose.Types.ObjectId(tableId), businessId },
     { $set: body },
     { new: true }
   );
@@ -35,8 +37,9 @@ export async function DELETE(_req: Request, { params }: { params: Params }) {
   await dbConnect();
   const { tableId } = await params;
 
+  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
   await Table.findOneAndUpdate(
-    { _id: tableId, businessId: session.user.businessId },
+    { _id: new mongoose.Types.ObjectId(tableId), businessId },
     { $set: { isActive: false } }
   );
 

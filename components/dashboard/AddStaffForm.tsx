@@ -8,6 +8,8 @@ export default function AddStaffForm() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [role, setRole] = useState("STAFF");
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -16,21 +18,40 @@ export default function AddStaffForm() {
     setError("");
 
     const fd = new FormData(e.currentTarget);
+    const employeeNumber = fd.get("employeeNumber") as string;
+    const name = fd.get("name") as string;
+    const currentRole = fd.get("role") as string;
+
     try {
+      const body: any = {
+        name,
+        employeeNumber,
+        role: currentRole,
+      };
+
+      // Email + password only required for ADMIN
+      if (currentRole === "ADMIN") {
+        body.email = fd.get("email");
+        body.password = fd.get("password");
+      } else if (currentRole === "STAFF") {
+        // STAFF: auto-generate credentials (email not displayed, never used)
+        body.email = `emp${employeeNumber}@restkit.local`;
+        body.password = Math.random().toString(36).slice(-8);
+      }
+
       const res = await fetch("/api/staff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: fd.get("name"),
-          email: fd.get("email"),
-          password: fd.get("password"),
-          role: fd.get("role"),
-        }),
+        body: JSON.stringify(body),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al crear empleado");
-      setOpen(false);
-      router.refresh();
+      setSuccess(`✓ ${name} fue agregado exitosamente`);
+      setError("");
+      // Reset form and reload page after brief delay
+      e.currentTarget.reset();
+      setTimeout(() => window.location.reload(), 600);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -41,7 +62,11 @@ export default function AddStaffForm() {
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          setError("");
+          setSuccess("");
+        }}
         className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 transition-colors shadow-sm"
       >
         <UserPlus size={15} /> Agregar Empleado
@@ -60,6 +85,23 @@ export default function AddStaffForm() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Role selector */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+              Tipo de empleado
+            </label>
+            <select
+              name="role"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+            >
+              <option value="STAFF">Mesero — Toma pedidos en mesas</option>
+              <option value="ADMIN">Gerente — Acceso a analíticas y configuración</option>
+            </select>
+          </div>
+
+          {/* Name */}
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
               Nombre completo <span className="text-red-500">*</span>
@@ -72,46 +114,76 @@ export default function AddStaffForm() {
             />
           </div>
 
+          {/* Employee Number */}
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-              Correo electrónico <span className="text-red-500">*</span>
+              Número de empleado <span className="text-red-500">*</span>
             </label>
             <input
-              name="email"
-              type="email"
+              name="employeeNumber"
               required
-              placeholder="empleado@ejemplo.com"
+              placeholder="Ej. 001, 002, 003..."
+              maxLength={10}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              {role === "STAFF" ? "Solo usará este número para iniciar sesión" : "Número identificativo único"}
+            </p>
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-              Contraseña temporal <span className="text-red-500">*</span>
-            </label>
-            <input
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              placeholder="Mínimo 8 caracteres"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-            />
+          {/* Email (only for ADMIN) */}
+          {role === "ADMIN" && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Correo electrónico <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="email"
+                type="email"
+                required={role === "ADMIN"}
+                placeholder="gerente@ejemplo.com"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+            </div>
+          )}
+
+          {/* Password (only for ADMIN) */}
+          {role === "ADMIN" && (
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                Contraseña <span className="text-red-500">*</span>
+              </label>
+              <input
+                name="password"
+                type="password"
+                required={role === "ADMIN"}
+                minLength={8}
+                placeholder="Mínimo 8 caracteres"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+            </div>
+          )}
+
+          {/* Info box */}
+          <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
+            {role === "STAFF" ? (
+              <>
+                <p className="font-semibold">✓ Mesero</p>
+                <p className="mt-1">Solo necesita número de empleado para iniciar sesión en las mesas.</p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold">✓ Gerente</p>
+                <p className="mt-1">Necesita email y contraseña para acceder a configuración.</p>
+              </>
+            )}
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-              Rol
-            </label>
-            <select
-              name="role"
-              defaultValue="STAFF"
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-            >
-              <option value="STAFF">Empleado — solo clientes y visitas</option>
-              <option value="ADMIN">Gerente — analíticas + clientes</option>
-            </select>
-          </div>
+          {success && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm text-emerald-600">
+              {success}
+            </div>
+          )}
 
           {error && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">

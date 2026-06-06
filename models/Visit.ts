@@ -5,7 +5,8 @@ export interface IVisit extends Document {
   businessId: mongoose.Types.ObjectId;
   employeeId: mongoose.Types.ObjectId;
   type: 'VISIT' | 'REWARD_REDEMPTION';
-  timestamp: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const VisitSchema: Schema = new Schema(
@@ -33,7 +34,6 @@ const VisitSchema: Schema = new Schema(
       enum: ['VISIT', 'REWARD_REDEMPTION'],
       default: 'VISIT',
     },
-    timestamp: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );
