@@ -14,6 +14,7 @@ export interface IUser extends Document {
   businessId: mongoose.Types.ObjectId;
   image?: string;
   emailVerified?: Date;
+  employeeNumber?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +37,7 @@ const UserSchema: Schema = new Schema(
     },
     image: { type: String },
     emailVerified: { type: Date },
+    employeeNumber: { type: String },
   },
   { timestamps: true }
 );

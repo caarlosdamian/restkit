@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { analyticsService } from "@/services/analytics.service";
 import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import SeedButton from "@/components/dashboard/SeedButton";
 
 export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -39,6 +40,11 @@ export default async function DashboardPage() {
           <UserPlus size={15} /> Nuevo Cliente
         </Link>
       </div>
+
+      {/* Seed button (for testing) */}
+      {session.user.role === "OWNER" && (
+        <SeedButton />
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

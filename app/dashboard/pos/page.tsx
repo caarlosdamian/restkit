@@ -6,7 +6,7 @@ import Order from "@/models/Order";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, LayoutGrid } from "lucide-react";
 import AddTableButton from "@/components/pos/AddTableButton";
 import TablesFilterBar from "@/components/filters/TablesFilterBar";
 
@@ -110,7 +110,18 @@ export default async function PosPage({
             {occupied} de {tables.length} mesas ocupadas
           </p>
         </div>
-        {canManage && <AddTableButton />}
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <Link
+              href="/dashboard/pos/layout"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <LayoutGrid size={16} />
+              Distribuir Mesas
+            </Link>
+          )}
+          {canManage && <AddTableButton />}
+        </div>
       </div>
 
       {/* Filters */}
@@ -130,8 +141,92 @@ export default async function PosPage({
         </div>
       )}
 
-      {/* Table grid */}
-      {tables.length > 0 && (
+      {/* Check if any tables have position data */}
+      {tables.length > 0 && tables.some((t) => t.position) ? (
+        // Layout view (if positions are set)
+        <div className="space-y-6">
+          {/* Group by section */}
+          {Array.from(new Set(tables.map((t) => t.section || "Sin sección"))).map((section) => {
+            const sectionTables = tables.filter((t) => (t.section || "Sin sección") === section);
+            const hasPositions = sectionTables.some((t) => t.position);
+
+            return (
+              <div key={section}>
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4">{section}</p>
+                {hasPositions ? (
+                  // Canvas layout
+                  <div className="rounded-2xl border border-gray-200 overflow-hidden" style={{ position: "relative", height: "400px" }}>
+                    <div style={{ position: "relative", width: "100%", height: "100%", backgroundColor: "#f9fafb" }}>
+                      {sectionTables.map((table) => {
+                        const order = table.activeOrder;
+                        const statusKey = order ? (order.status as OrderStatus) : "available";
+                        const cfg = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.available;
+                        const x = table.position?.x ?? 0;
+                        const y = table.position?.y ?? 0;
+                        const canvasWidth = 1200;
+                        const canvasHeight = 400;
+
+                        return (
+                          <Link
+                            key={table._id.toString()}
+                            href={`/dashboard/pos/${table._id}`}
+                            className={`rounded-xl border-2 p-3 flex flex-col gap-2 transition-all absolute no-underline active:scale-95 ${cfg.card}`}
+                            style={{
+                              left: `${(x / canvasWidth) * 100}%`,
+                              top: `${(y / canvasHeight) * 100}%`,
+                              width: "80px",
+                              height: "80px",
+                            }}
+                          >
+                            <div className="flex items-start justify-between flex-1">
+                              <div>
+                                <p className="text-xs font-bold text-gray-400 uppercase">Mesa</p>
+                                <p className="text-xl font-extrabold text-gray-900">{table.number}</p>
+                              </div>
+                              <div className={`w-2 h-2 rounded-full mt-1 ${cfg.dot}`} />
+                            </div>
+                            <p className="text-[0.65rem] text-gray-500">{table.capacity} pers.</p>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  // Grid layout for sections without positions
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {sectionTables.map((table) => {
+                      const order = table.activeOrder;
+                      const statusKey = order ? (order.status as OrderStatus) : "available";
+                      const cfg = STATUS_CONFIG[statusKey] ?? STATUS_CONFIG.available;
+
+                      return (
+                        <Link
+                          key={table._id.toString()}
+                          href={`/dashboard/pos/${table._id}`}
+                          className={`rounded-xl border-2 p-4 flex flex-col gap-2 transition-all no-underline active:scale-95 ${cfg.card}`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-xs font-bold text-gray-400 uppercase">Mesa</p>
+                              <p className="text-2xl font-extrabold text-gray-900">{table.number}</p>
+                            </div>
+                            <div className={`w-2.5 h-2.5 rounded-full mt-1 ${cfg.dot}`} />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-gray-600">{cfg.label}</p>
+                            <p className="text-[0.65rem] text-gray-500">{table.capacity} personas</p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        // Default grid view
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {tables.map((table) => {
             const order = table.activeOrder;

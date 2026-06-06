@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import Order, { IOrderItem } from '@/models/Order';
+import Table from '@/models/Table';
 import dbConnect from '@/lib/db';
 
 type Params = Promise<{ orderId: string }>;
@@ -47,6 +48,11 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
         order.amountReceived = Number(body.amountReceived);
         order.change = Math.max(0, Number(body.amountReceived) - order.total);
       }
+      // Unassign table from staff when order is paid
+      await Table.updateOne(
+        { _id: order.tableId },
+        { $set: { assignedStaffId: null } }
+      );
     }
     if (body.status === 'CANCELLED') order.closedAt = new Date();
   }

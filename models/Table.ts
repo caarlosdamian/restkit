@@ -6,6 +6,12 @@ export interface ITable extends Document {
   capacity: number;
   businessId: mongoose.Types.ObjectId;
   isActive: boolean;
+  position?: {
+    x: number;
+    y: number;
+  };
+  section?: string;
+  assignedStaffId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +23,12 @@ const TableSchema = new Schema<ITable>(
     capacity: { type: Number, default: 4 },
     businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
     isActive: { type: Boolean, default: true },
+    position: {
+      x: { type: Number },
+      y: { type: Number },
+    },
+    section: { type: String },
+    assignedStaffId: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );
