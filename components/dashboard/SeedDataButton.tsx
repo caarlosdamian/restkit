@@ -23,8 +23,7 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
-  const [seedData, setSeedData] = useState<SeedResponse["data"]>(null);
-  const [showCode, setShowCode] = useState(false);
+  const [seedData, setSeedData] = useState<SeedResponse["data"]>(undefined);
 
   async function handleSeed() {
     if (!window.confirm("¿Crear datos de prueba? (Mesas, productos, clientes)")) {
@@ -48,7 +47,7 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
         return;
       }
 
-      setSeedData(data.data || null);
+      setSeedData(data.data || undefined);
       setSuccess(true);
       setTimeout(() => {
         window.location.reload();

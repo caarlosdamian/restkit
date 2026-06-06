@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Table from "@/models/Table";
-import Order from "@/models/Order";
+import User from "@/models/User";
 import dbConnect from "@/lib/db";
 import mongoose from "mongoose";
 import Link from "next/link";
@@ -60,6 +60,10 @@ export default async function PosPage({
   const bId = new mongoose.Types.ObjectId(session.user.businessId);
   const canManage = ["OWNER", "ADMIN"].includes(session.user.role);
 
+  // Fetch user from database to get employeeNumber
+  const user = await User.findById(session.user.id);
+  const employeeNumber = user?.employeeNumber || "";
+
   let tables = await Table.aggregate([
     { $match: { businessId: bId, isActive: true } },
     { $sort: { number: 1 } },
@@ -97,12 +101,12 @@ export default async function PosPage({
     tables = tables.filter((t) => t.activeOrder);
   }
 
-  const occupied = tables.filter((t) => t.activeOrder).length;
+  const occupied = tables?.filter((t) => t.activeOrder).length;
 
   return (
     <POSPageWrapper
       userRole={session.user.role}
-      employeeNumber={session.user.employeeNumber}
+      employeeNumber={employeeNumber}
       userName={session.user.name}
     >
       <div className="space-y-6">

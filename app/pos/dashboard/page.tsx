@@ -56,13 +56,12 @@ export default function POSDashboard() {
       });
 
       if (tablesRes.ok) {
-        const tablesData = await tablesRes.json();
-        setTables(tablesData);
+        const tablesData = await tablesRes.json() as {success:boolean,tables:[]};
+        setTables(tablesData.tables);
       }
 
       // Fetch POS session
-      // const sessionRes = await fetch("/api/pos-session/current");
-       const sessionRes = await fetch(`/api/pos-session/current?employeeNumber=${encodeURIComponent(employeeSession.employeeId)}`);
+      const sessionRes = await fetch(`/api/pos-session/current?employeeNumber=${encodeURIComponent(employeeSession.employeeNumber)}`);
       if (sessionRes.ok) {
         const sessionData = await sessionRes.json();
         setPOSSession(sessionData.session);
@@ -145,7 +144,7 @@ export default function POSDashboard() {
   }
 
   // Show POS grid if session is open
-  const occupied = tables.filter((t) => t.activeOrder).length;
+  const occupied = tables?.filter((t) => t.activeOrder).length;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">

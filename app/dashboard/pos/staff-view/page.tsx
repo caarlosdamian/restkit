@@ -80,7 +80,7 @@ export default function StaffPosPage() {
   if (!staffSession) return null;
   if (loading) return <div className="p-6 text-center">Cargando mesas...</div>;
 
-  const occupied = tables.filter((t) => t.activeOrder).length;
+  const occupied = tables?.filter((t) => t.activeOrder).length;
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
