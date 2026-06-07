@@ -70,20 +70,19 @@ export async function POST(req: Request) {
   await dbConnect();
 
   if (role === 'ADMIN') {
-    // ADMIN: use better-auth for password hashing
-    const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-    const res = await fetch(`${appUrl}/api/auth/sign-up/email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err.message ?? 'Error al crear gerente' },
-        { status: 400 }
-      );
+    // ADMIN: use better-auth's server API directly for password hashing.
+    // Calling auth.api avoids an HTTP self-fetch (no dependency on APP_URL /
+    // the runtime port, works the same in dev and production).
+    try {
+      await auth.api.signUpEmail({
+        body: { name, email, password, role, businessId: session.user.businessId },
+      });
+    } catch (err) {
+      const message =
+        (err as { body?: { message?: string }; message?: string })?.body?.message ??
+        (err as { message?: string })?.message ??
+        'Error al crear gerente';
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     // Patch role + employeeNumber

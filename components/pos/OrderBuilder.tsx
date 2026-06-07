@@ -79,7 +79,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
         const data = await res.json();
         if (!data.session) {
           setSessionValid(false);
-          router.push("/dashboard/pos");
+          router.push("/pos/dashboard");
         }
       }
     } catch (err) {
@@ -218,7 +218,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       }
       setStatus(nextStatus);
       if (nextStatus === "PAID" || nextStatus === "CANCELLED") {
-        router.push("/dashboard/pos");
+        router.push("/pos/dashboard");
         router.refresh();
       }
     } finally {
@@ -243,11 +243,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       {/* Header */}
       <div className="flex items-center gap-4 mb-5">
         <button
-          onClick={() => {
-            const waiterSession = window.localStorage.getItem("waiterSession");
-            const redirectUrl = waiterSession ? "/dashboard/pos/waiter-lobby" : "/dashboard/pos";
-            router.push(redirectUrl);
-          }}
+          onClick={() => router.push("/pos/dashboard")}
           className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
           title="Volver"
         >
@@ -521,7 +517,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
           ticketConfig={ticketConfig}
           onClose={() => setShowPayment(false)}
           onPaid={() => {
-            router.push("/dashboard/pos");
+            router.push("/pos/dashboard");
             router.refresh();
           }}
         />

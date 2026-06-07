@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
 import {
   Home, Users, Settings, UserCog, Gift,
-  ShoppingCart, Monitor, Package, ClipboardList,
+  Monitor, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
 } from "lucide-react";
 
@@ -43,8 +43,7 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard" icon={Home} label="Inicio" />
           )}
 
-          {/* Everyone — POS first since it's the daily tool */}
-          <NavLink href="/dashboard/pos" icon={ShoppingCart} label="POS — Mesas" />
+          {/* POS lives entirely under /pos (terminal flow), not the dashboard */}
           <NavLink href="/dashboard/customers" icon={Users} label="Clientes" />
           <NavLink href="/dashboard/loyalty" icon={Gift} label="Fidelización" />
 

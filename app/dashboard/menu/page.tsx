@@ -19,7 +19,7 @@ export default async function MenuPage({
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
-  if (session.user.role === "STAFF") redirect("/dashboard/pos");
+  if (session.user.role === "STAFF") redirect("/pos");
 
   const sp = await searchParams;
   const search = (sp.search || "").toLowerCase();

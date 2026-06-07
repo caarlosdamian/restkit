@@ -18,7 +18,7 @@ export default async function ReportsPage({
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
-  if (!["OWNER", "ADMIN"].includes(session.user.role as string)) redirect("/dashboard/pos");
+  if (!["OWNER", "ADMIN"].includes(session.user.role as string)) redirect("/pos");
 
   const sp = await searchParams;
   const period = (["today", "week", "month"].includes(sp.period || "")
