@@ -12,6 +12,9 @@ export interface ITable extends Document {
   };
   section?: string;
   assignedStaffId?: mongoose.Types.ObjectId;
+  /** Manually marked as occupied (guests seated, no order yet). A table is
+   *  also considered busy whenever it has an active order. */
+  isOccupied: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +32,7 @@ const TableSchema = new Schema<ITable>(
     },
     section: { type: String },
     assignedStaffId: { type: Schema.Types.ObjectId, ref: 'User' },
+    isOccupied: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

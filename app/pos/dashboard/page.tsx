@@ -16,13 +16,28 @@ interface EmployeeSession {
   employeeNumber?: string;
 }
 
+interface ActiveOrder {
+  _id: string;
+  status: string;
+  total: number;
+  itemCount: number;
+}
+
 interface Table {
   _id: string;
   number: number;
   name: string;
   capacity: number;
   section: string;
-  activeOrder?: any;
+  isOccupied?: boolean;
+  activeOrder?: ActiveOrder | null;
+}
+
+type TableFilter = "all" | "busy" | "free";
+
+// A table is busy if it has an active order OR was manually marked occupied.
+function isBusy(t: Table): boolean {
+  return !!t.activeOrder || !!t.isOccupied;
 }
 
 export default function POSDashboard() {
@@ -31,6 +46,28 @@ export default function POSDashboard() {
   const [posSession, setPOSSession] = useState<any>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<TableFilter>("all");
+
+  // Mark/free a table manually (only meaningful when it has no active order).
+  async function toggleBusy(table: Table) {
+    const next = !table.isOccupied;
+    setTables((prev) =>
+      prev.map((t) => (t._id === table._id ? { ...t, isOccupied: next } : t))
+    );
+    try {
+      const res = await fetch(`/api/pos/tables/${table._id}/occupancy`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isOccupied: next }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      // Revert on failure
+      setTables((prev) =>
+        prev.map((t) => (t._id === table._id ? { ...t, isOccupied: !next } : t))
+      );
+    }
+  }
 
   useEffect(() => {
     // Check POS employee session
@@ -145,7 +182,16 @@ export default function POSDashboard() {
   }
 
   // Show POS grid if session is open
-  const occupied = tables?.filter((t) => t.activeOrder).length;
+  const occupied = tables.filter(isBusy).length;
+  const visibleTables = tables.filter((t) =>
+    filter === "all" ? true : filter === "busy" ? isBusy(t) : !isBusy(t)
+  );
+
+  const FILTERS: Array<{ key: TableFilter; label: string }> = [
+    { key: "all", label: `Todas (${tables.length})` },
+    { key: "busy", label: `Ocupadas (${occupied})` },
+    { key: "free", label: `Libres (${tables.length - occupied})` },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 pb-6">
@@ -196,10 +242,24 @@ export default function POSDashboard() {
 
       {/* Tables grid */}
       <div className="max-w-7xl mx-auto px-6 mt-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <p className="text-sm text-gray-600">
             {occupied} de {tables.length} mesas ocupadas
           </p>
+          {/* Filter chips */}
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+            {FILTERS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  filter === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tables.length === 0 ? (
@@ -207,40 +267,71 @@ export default function POSDashboard() {
             <Users size={28} className="mx-auto mb-4 text-gray-300" />
             <p className="text-base font-semibold text-gray-900">Sin mesas configuradas</p>
           </div>
+        ) : visibleTables.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-16 text-center">
+            <p className="text-base font-semibold text-gray-900">
+              {filter === "busy" ? "No hay mesas ocupadas" : "No hay mesas libres"}
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {tables.map((table) => {
+            {visibleTables.map((table) => {
               const order = table.activeOrder;
-              const isOccupied = !!order;
+              const hasOrder = !!order;
+              const busy = hasOrder || !!table.isOccupied;
+
+              // Visual state: order = amber, manual busy = rose, free = emerald
+              const tone = hasOrder
+                ? { border: "border-amber-300", bg: "bg-amber-50", dot: "bg-amber-400" }
+                : table.isOccupied
+                ? { border: "border-rose-300", bg: "bg-rose-50", dot: "bg-rose-400" }
+                : { border: "border-emerald-300", bg: "bg-emerald-50", dot: "bg-emerald-400" };
 
               return (
-                <Link
+                <div
                   key={table._id}
-                  href={`/pos/order/${table._id}`}
-                  className={`rounded-2xl border-2 p-5 flex flex-col gap-3 transition-all no-underline active:scale-95 ${
-                    isOccupied
-                      ? "border-amber-300 bg-amber-50 hover:shadow-md"
-                      : "border-emerald-300 bg-emerald-50 hover:shadow-md"
-                  }`}
+                  className={`relative rounded-2xl border-2 p-5 transition-all ${tone.border} ${tone.bg}`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mesa</p>
-                      <p className="text-3xl font-extrabold text-gray-900 mt-1">{table.number}</p>
-                    </div>
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        isOccupied ? "bg-amber-400" : "bg-emerald-400"
+                  {/* Manual occupancy toggle — hidden while an order is active
+                      (the order itself keeps the table busy). */}
+                  {!hasOrder && (
+                    <button
+                      onClick={() => toggleBusy(table)}
+                      className={`absolute top-2.5 right-2.5 z-10 text-[0.65rem] font-bold px-2 py-1 rounded-full border transition-colors ${
+                        table.isOccupied
+                          ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-100"
+                          : "bg-white border-gray-200 text-gray-500 hover:bg-gray-100"
                       }`}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-semibold text-gray-600">
-                      {isOccupied ? "Tomando orden" : "Disponible"}
-                    </p>
-                    <p className="text-xs text-gray-500">{table.capacity} personas</p>
-                  </div>
-                </Link>
+                    >
+                      {table.isOccupied ? "Liberar" : "Ocupar"}
+                    </button>
+                  )}
+
+                  <Link
+                    href={`/pos/order/${table._id}`}
+                    className="block no-underline active:scale-95 transition-transform"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mesa</p>
+                        <p className="text-3xl font-extrabold text-gray-900 mt-1">{table.number}</p>
+                      </div>
+                      <div className={`w-3 h-3 rounded-full mt-1 ${tone.dot}`} />
+                    </div>
+                    <div className="space-y-1 mt-3">
+                      <p className="text-xs font-semibold text-gray-600">
+                        {hasOrder ? "Tomando orden" : table.isOccupied ? "Ocupada" : "Disponible"}
+                      </p>
+                      {hasOrder ? (
+                        <p className="text-xs text-gray-500">
+                          {order!.itemCount} producto{order!.itemCount !== 1 ? "s" : ""} · ${order!.total.toFixed(2)}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500">{table.capacity} personas</p>
+                      )}
+                    </div>
+                  </Link>
+                </div>
               );
             })}
           </div>

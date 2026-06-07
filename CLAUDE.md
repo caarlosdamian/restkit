@@ -14,6 +14,44 @@
 - **Icons**: lucide-react
 - **Wallet**: Apple Wallet (.pkpass), Google Wallet (JWT)
 - **Printing**: HTML/CSS to browser print dialog (80mm thermal paper format)
+- **POS auth**: two-layer — better-auth terminal session + per-waiter PIN (scrypt hash + HMAC ephemeral token)
+
+---
+
+## ⭐ POS Architecture (v2 — CURRENT, read this first)
+
+The POS was refactored away from an insecure localStorage flow. **The POS now lives entirely under `/pos`** — the old `/dashboard/pos/*` tree was **deleted**. Do not reference `/dashboard/pos`.
+
+### POS routes (the daily tool)
+- `/pos` — terminal login. A **manager (OWNER/ADMIN) signs in with better-auth** (email+password) to open the terminal for the shift. Sets an httpOnly session cookie. (`components/pos/POSLoginPage.tsx`)
+- `/pos/dashboard` — table grid + cash session. Opens/closes the register (`POSSession`).
+- `/pos/order/[tableId]` — gated by a **waiter PIN modal**, then renders `OrderBuilder`.
+
+### Two-layer auth (the security model)
+1. **Terminal session = the security boundary.** Every POS API route derives `businessId`/identity from the better-auth cookie via `getBusinessContext()` in **`lib/pos-auth.ts`** — never from client-supplied body/query. Client `localStorage`/`sessionStorage` is display-only and never trusted for authorization.
+2. **Waiter PIN = lightweight actor selection** on top of the trusted terminal. On a correct PIN the server issues a short-lived (90s) signed HMAC token. Logic in **`lib/waiter-token.ts`** (server: `hashPin`, `verifyPinHash`, `signWaiterToken`, `verifyWaiterToken`) and **`lib/waiter-session.ts`** (client: active waiter in `sessionStorage`, rolling 90s window, `waiterHeader()`, `refreshWaiterFromResponse()`).
+   - PIN modal: `components/pos/WaiterPinModal.tsx` (keypad + "continuar como gerente" escape hatch).
+   - Order mutations send `x-waiter-token`; the server attributes `staffId`/`items[].addedBy` and **refreshes the token in the response header** (rolling window, no re-typing while active).
+   - PINs are hashed (scrypt) in `user.pinHash`, set at staff creation or via `PATCH /api/staff/[staffId]` `{ pin }`. 4–6 digits, unique per business in practice.
+
+### Attribution & reporting (Fase 3)
+- `Order.items[].addedBy` records which waiter added each line (falls back to `order.staffId` for legacy lines).
+- **`/dashboard/reports`** ("Ventas por mesero") aggregates paid orders by `addedBy` for tips/commissions — `analyticsService.getWaiterSales(businessId, period)`.
+- Order history (`/dashboard/orders`) shows the waiter who opened each order.
+
+### Busy tables
+- A table is **busy** if it has an active order **OR** `Table.isOccupied === true` (manual "seated, no order yet").
+- `PATCH /api/pos/tables/[tableId]/occupancy` toggles the manual flag (terminal-session scoped).
+- Paying/cancelling an order frees the table (`isOccupied = false`).
+- `/pos/dashboard` grid: filter chips (Todas / Ocupadas / Libres); 3 visual states (amber = order, rose = manual busy, emerald = free).
+
+### Key files
+`lib/pos-auth.ts`, `lib/waiter-token.ts`, `lib/waiter-session.ts`, `components/pos/{POSLoginPage,OrderBuilder,PaymentModal,WaiterPinModal,POSSessionStart,POSSessionClose,ReprintButton}.tsx`.
+
+### Deleted in this refactor (do not recreate)
+- Pages: entire `app/dashboard/pos/*` tree (grid, order, table-layout editor, staff/waiter login + lobby).
+- Components: `StaffLoginForm`, `WaiterLoginForm`, `TableLayoutEditor`, `POSContainer`, `AddTableButton`, `POSPageWrapper`, `TablesFilterBar`.
+- API routes: `api/pos/login`, `api/staff/login`, `api/waiter/check-in`, `api/tables/layout`, `api/staff/[staffId]/tables` (old passwordless lookups / layout editor).
 
 ---
 
@@ -47,10 +85,12 @@ restkit/
 
 ### **User**
 Role-based access control (RBAC). Three roles: OWNER, ADMIN, STAFF.
-- `_id`, `name`, `email`, `password`, `businessId`, `role`, `createdAt`, `updatedAt`
+- `_id`, `name`, `email`, `password`, `businessId`, `role`, `employeeNumber`, `pinHash`, `createdAt`, `updatedAt`
+- `employeeNumber`: short staff identifier. `pinHash`: scrypt-hashed POS PIN (waiter identity).
+- ⚠️ **`businessId` type inconsistency (known debt)**: the Better Auth `user` collection stores `businessId` as a **string**; domain collections (Order/Table/POSSession) use **ObjectId**. When querying `user` by business, match both forms (`$in: [businessIdStr, businessId]`). `getBusinessContext()` exposes both `businessId` (ObjectId) and `businessIdStr`.
 - OWNER: Full access to all features
 - ADMIN: Analytics, menu management, settings, staff management
-- STAFF: Can view customers/loyalty, record visits, add items to orders (POS)
+- STAFF: Takes orders on the POS (terminal) via PIN; no dashboard access
 
 ### **Business**
 Restaurant entity. One per subscription account.
@@ -60,8 +100,9 @@ Restaurant entity. One per subscription account.
 
 ### **Table**
 Physical dining table.
-- `businessId`, `number`, `name`, `capacity`, `isActive`
+- `businessId`, `number`, `name`, `capacity`, `isActive`, `isOccupied`, `position`, `section`, `assignedStaffId`
 - Soft-deleted via `isActive: false`
+- `isOccupied`: manual "busy" flag (seated, no order yet). Effective **busy = `isOccupied` OR has active order**. Reset to `false` when the order is paid/cancelled.
 
 ### **Product**
 Menu item.
@@ -76,7 +117,14 @@ Per-table order during a shift.
 - One active order per table (enforced by compound index on tableId+status)
 
 ### **OrderItem** (embedded in Order)
-- `productId`, `name`, `price`, `quantity`, `notes`
+- `productId`, `name`, `price`, `quantity`, `notes`, `addedBy`
+- `addedBy`: waiter (User `_id`) who first added the line — used for per-waiter sales (Fase 3). Preserved on item replace; new lines stamped with the acting waiter.
+
+### **POSSession**
+Cash register session (one open per business at a time).
+- `businessId`, `staffId`, `staffName`, `status` (OPEN/CLOSED), `openingBalance`, `closingBalance`
+- Sales rollups: `totalSales`, `totalOrders`, `cashSales`, `cardSales`, `transferSales`, `expectedCash`, `actualCash`, `variance`
+- Opened/closed by a manager from `/pos/dashboard`. Sales computed from PAID orders since `startedAt`.
 
 ### **Customer**
 Loyalty program member.
@@ -121,6 +169,15 @@ All routes require authentication via `better-auth`.
 - `PATCH /api/orders/[orderId]` — Update order items/status/payment
   - Accepts: `items[]`, `status`, `paymentMethod`, `amountReceived`
   - Auto-generates `ticketNumber` and calculates `change` on PAID status
+  - Reads optional `x-waiter-token` header → attributes `staffId`/`items[].addedBy`, refreshes the token in the response. On PAID/CANCELLED frees the table (`isOccupied=false`, unsets `assignedStaffId`).
+
+### POS — sessions, waiter PIN, occupancy (all derive businessId from `getBusinessContext()`)
+- `POST /api/pos-session/start` — Open register (manager only). Body: `openingBalance`.
+- `GET  /api/pos-session/current` — Current open session + live sales.
+- `POST /api/pos-session/close` — Close register, returns cash-cut (manager only).
+- `POST /api/pos/waiter/verify-pin` — Validate a waiter PIN within the business → returns ephemeral token (`{ staffId, staffName, token }`). Throttled.
+- `POST /api/waiter/available-tables` — POS table grid: tables + active order summary + `isOccupied`.
+- `PATCH /api/pos/tables/[tableId]/occupancy` — Toggle manual `isOccupied`. Body: `{ isOccupied: boolean }`.
 
 ### Customers
 - `GET /api/customers` — List all customers
@@ -134,10 +191,11 @@ All routes require authentication via `better-auth`.
   - Triggers Apple push notifications (if registered)
   - Triggers Google Wallet PATCH
 
-### Staff
-- `GET /api/staff` — List staff (OWNER only)
-- `POST /api/staff` — Create staff (invite, OWNER only)
-- `DELETE /api/staff/[staffId]` — Remove staff (OWNER only)
+### Staff (OWNER only)
+- `GET /api/staff` — List staff
+- `POST /api/staff` — Create staff. STAFF inserted directly; **ADMIN created via `auth.api.signUpEmail()`** (server API, no HTTP self-fetch / no `APP_URL` dependency) passing `role` + `businessId`. Optional `pin` (4–6 digits) → hashed into `pinHash`.
+- `PATCH /api/staff/[staffId]` — Set/reset a staff member's POS PIN (`{ pin }`).
+- `DELETE /api/staff/[staffId]` — Remove staff (+ sessions/accounts)
 
 ### Settings
 - `GET /api/settings` — Fetch business settings
@@ -162,20 +220,10 @@ All pages are protected by `auth()` and redirect to `/login` if unauthenticated.
 ### `/dashboard`
 Analytics home (OWNER/ADMIN). Stats, 7-day revenue chart, top customers, recent activity.
 
-### `/dashboard/pos`
-Table grid. Color-coded status (gray=free, amber=open, blue pulsing=in kitchen, green=ready).
-- Occupied count badge
-- Links to `/dashboard/pos/[tableId]` to build orders
+> **POS is NOT in the dashboard.** It lives under `/pos` (see the POS Architecture section above). The old `/dashboard/pos/*` pages were deleted.
 
-### `/dashboard/pos/[tableId]`
-**OrderBuilder** — main POS interface.
-- Left: searchable product grid, category filters
-- Right: shopping cart, status indicators
-- Multi-round kitchen sends via `kitchenSnapshot` Map
-- Auto-save (800ms debounce) to `/api/orders`
-- **"Cobrar" button** opens **PaymentModal** instead of direct PAID
-- PaymentModal: method selection (CASH/CARD/TRANSFER) → change calculator → "Ver ticket de prueba"
-- On confirm: PATCH to API, generates ticket #, prints receipt
+### `/dashboard/reports` (Ventas por mesero)
+Per-waiter sales report (OWNER/ADMIN). Period filter (today/7d/30d). Revenue split by `items.addedBy`, with share bars. Backed by `analyticsService.getWaiterSales`.
 
 ### `/dashboard/menu`
 Menu management (OWNER/ADMIN).
@@ -228,9 +276,10 @@ Business configuration (OWNER/ADMIN, redirects STAFF to /customers).
 ### Client Components
 
 **OrderBuilder** (`components/pos/OrderBuilder.tsx`)
+- Hosted by `/pos/order/[tableId]` (after the waiter PIN gate). Redirects to `/pos/dashboard` after pay/cancel.
 - Manages product search, category filtering, shopping cart
 - State: `orderId`, `status`, `items`, `kitchenSnapshot` (tracks what was sent to kitchen)
-- Auto-save to `/api/orders` on item changes
+- Auto-save to `/api/orders` on item changes; attaches `x-waiter-token` (`waiterHeader()`) and rolls the window (`refreshWaiterFromResponse`)
 - Status flow buttons: "Enviar a cocina" → "Marcar como lista" → "Cobrar" → PaymentModal
 - Pending badge shows items not yet sent to kitchen
 
@@ -275,8 +324,9 @@ All dashboard pages are async server components that:
 
 ### RBAC
 - Route-level checks: `if (!['OWNER', 'ADMIN'].includes(session.user.role)) return 401`
-- Page-level redirects: STAFF → `/dashboard/customers`, unauthenticated → `/login`
-- Sidebar hides nav items based on role
+- Page-level redirects: STAFF → `/pos` (no dashboard access), unauthenticated → `/login`
+- Sidebar hides nav items based on role; **the sidebar has no POS link** (POS is `/pos` only)
+- POS routes use `getBusinessContext()` / `isManager()` instead of inline session checks
 
 ### Multi-round Kitchen Orders
 - `kitchenSnapshot` Map tracks products sent to kitchen in previous rounds
@@ -302,11 +352,16 @@ All dashboard pages are async server components that:
 
 ## Authentication & Sessions
 
-**better-auth** with database-backed sessions.
+**better-auth** with database-backed sessions (the only real auth boundary).
 - Sign up creates Business if first user
 - Login returns session with `user.businessId`, `user.role`, `user.name`
 - Session is passed through `headers()` to every protected route
 - Logout clears session cookie
+
+### POS (two layers — see POS Architecture section)
+1. **Terminal**: a manager signs in with better-auth at `/pos` (shift open). All POS API routes call `getBusinessContext()` (`lib/pos-auth.ts`) to derive `businessId`/identity from the cookie — **never** from client input.
+2. **Waiter PIN**: identifies the acting waiter on the trusted terminal. PIN → ephemeral 90s HMAC token (`lib/waiter-token.ts`); client holds it in `sessionStorage` (`lib/waiter-session.ts`) and sends it as `x-waiter-token` on order mutations.
+- ⚠️ Never trust `role`/`businessId` coming from the client (`localStorage`/`sessionStorage` are display-only).
 
 ---
 
@@ -336,6 +391,10 @@ All dashboard pages are async server components that:
 6. **CFDI**: Fiscal invoice integration not built.
 7. **Multi-language**: Spanish only (es-MX).
 8. **Export/Reports**: No CSV/PDF export of orders or customers.
+9. **`businessId` type debt (Fase 4, not done)**: string in `user` collection vs ObjectId in domain collections. Currently mitigated with `$in: [businessIdStr, businessId]` on `user` lookups; normalize at the root eventually.
+10. **PIN throttle is in-memory** (per process) in `verify-pin` — move to Redis / a per-user lockout for multi-node.
+11. **PaymentModal does not send the waiter token** — the payment is attributed to the terminal user, not the waiter (usually fine; cobro is done by cashier/manager).
+12. **PINs need backfilling**: existing staff have no `pinHash` until set via staff create or `PATCH /api/staff/[id]`.
 
 ---
 
@@ -378,5 +437,5 @@ All dashboard pages are async server components that:
 
 ---
 
-**Last updated**: 2026-06-04  
-**Status**: MVP complete with POS, loyalty, analytics, settings, and order history.
+**Last updated**: 2026-06-07  
+**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, and busy-table tracking. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters.

@@ -59,7 +59,6 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   if (body.status) {
     order.status = body.status;
     if (body.status === 'PAID') {
-      order.closedAt = new Date();
       // Generate a short ticket number from the ObjectId
       order.ticketNumber = order._id.toString().slice(-6).toUpperCase();
       if (body.paymentMethod) order.paymentMethod = body.paymentMethod;
@@ -67,13 +66,15 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
         order.amountReceived = Number(body.amountReceived);
         order.change = Math.max(0, Number(body.amountReceived) - order.total);
       }
-      // Clear staff from table when order is paid
+    }
+    // Free the table when the order closes (paid or cancelled).
+    if (body.status === 'PAID' || body.status === 'CANCELLED') {
+      order.closedAt = new Date();
       await Table.updateOne(
         { _id: order.tableId },
-        { $unset: { assignedStaffId: '' } }
+        { $set: { isOccupied: false }, $unset: { assignedStaffId: '' } }
       );
     }
-    if (body.status === 'CANCELLED') order.closedAt = new Date();
   }
 
   if (body.notes !== undefined) order.notes = body.notes;
