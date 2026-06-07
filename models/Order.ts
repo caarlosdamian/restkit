@@ -8,6 +8,8 @@ export interface IOrderItem {
   price: number;
   quantity: number;
   notes?: string;
+  /** Waiter who first added this line (Fase 2 attribution). */
+  addedBy?: mongoose.Types.ObjectId;
 }
 
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
@@ -37,6 +39,7 @@ const OrderItemSchema = new Schema<IOrderItem>(
     price: { type: Number, required: true },
     quantity: { type: Number, required: true, min: 1 },
     notes: { type: String },
+    addedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { _id: false }
 );

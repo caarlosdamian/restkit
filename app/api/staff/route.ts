@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { hashPin } from '@/lib/waiter-token';
 
 // Only OWNER can manage staff
 async function requireOwner() {
@@ -44,11 +45,16 @@ export async function POST(req: Request) {
   const session = await requireOwner();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { name, email, password, employeeNumber, role = 'STAFF' } = await req.json();
+  const { name, email, password, employeeNumber, role = 'STAFF', pin } = await req.json();
 
   if (!name || !employeeNumber) {
     return NextResponse.json({ error: 'Nombre y número de empleado son requeridos' }, { status: 400 });
   }
+
+  if (pin !== undefined && pin !== '' && !/^\d{4,6}$/.test(String(pin))) {
+    return NextResponse.json({ error: 'El PIN debe tener entre 4 y 6 dígitos' }, { status: 400 });
+  }
+  const pinHash = pin ? hashPin(String(pin)) : undefined;
 
   // ADMIN requires email + password; STAFF only needs employee number
   if (role === 'ADMIN' && (!email || !password)) {
@@ -87,6 +93,7 @@ export async function POST(req: Request) {
           role,
           employeeNumber: employeeNumber.trim(),
           businessId: session.user.businessId,
+          ...(pinHash ? { pinHash } : {}),
           updatedAt: new Date(),
         },
       }
@@ -102,6 +109,7 @@ export async function POST(req: Request) {
       employeeNumber: employeeNumber.trim(),
       role: 'STAFF',
       businessId: session.user.businessId, // Store as string to match Better Auth format
+      ...(pinHash ? { pinHash } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     });

@@ -15,6 +15,8 @@ export interface IUser extends Document {
   image?: string;
   emailVerified?: Date;
   employeeNumber?: string;
+  /** Hashed POS PIN (scrypt) used to identify a waiter on a trusted terminal. */
+  pinHash?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,6 +39,7 @@ const UserSchema: Schema = new Schema(
     image: { type: String },
     emailVerified: { type: Date },
     employeeNumber: { type: String },
+    pinHash: { type: String },
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search } from "lucide-react";
 import PaymentModal from "./PaymentModal";
+import { waiterHeader, refreshWaiterFromResponse } from "@/lib/waiter-session";
 
 interface Product {
   _id: string;
@@ -130,17 +131,19 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       if (!orderId) {
         const res = await fetch("/api/orders", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...waiterHeader() },
           body: JSON.stringify({ tableId, items: nextItems }),
         });
+        refreshWaiterFromResponse(res);
         const data = await res.json();
         if (res.ok) setOrderId(data._id);
       } else {
-        await fetch(`/api/orders/${orderId}`, {
+        const res = await fetch(`/api/orders/${orderId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...waiterHeader() },
           body: JSON.stringify({ items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) }),
         });
+        refreshWaiterFromResponse(res);
       }
     } finally {
       setSaving(false);
@@ -178,19 +181,21 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       if (!oid) {
         const res = await fetch("/api/orders", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...waiterHeader() },
           body: JSON.stringify({ tableId, items }),
         });
+        refreshWaiterFromResponse(res);
         const data = await res.json();
         if (!res.ok) return;
         oid = data._id;
         setOrderId(oid);
       } else {
-        await fetch(`/api/orders/${oid}`, {
+        const res = await fetch(`/api/orders/${oid}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...waiterHeader() },
           body: JSON.stringify({ items, status: "IN_KITCHEN" }),
         });
+        refreshWaiterFromResponse(res);
       }
       // Update snapshot so the new items no longer show as "pending"
       setKitchenSnapshot(new Map(items.map((i) => [i.productId, i.quantity])));
@@ -204,11 +209,12 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
     setSaving(true);
     try {
       if (orderId) {
-        await fetch(`/api/orders/${orderId}`, {
+        const res = await fetch(`/api/orders/${orderId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...waiterHeader() },
           body: JSON.stringify({ items, status: nextStatus }),
         });
+        refreshWaiterFromResponse(res);
       }
       setStatus(nextStatus);
       if (nextStatus === "PAID" || nextStatus === "CANCELLED") {

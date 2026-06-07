@@ -23,10 +23,12 @@ export default function AddStaffForm() {
     const currentRole = fd.get("role") as string;
 
     try {
+      const pin = (fd.get("pin") as string)?.trim();
       const body: any = {
         name,
         employeeNumber,
         role: currentRole,
+        ...(pin ? { pin } : {}),
       };
 
       // Email + password only required for ADMIN
@@ -127,7 +129,25 @@ export default function AddStaffForm() {
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
             />
             <p className="text-xs text-gray-400 mt-1">
-              {role === "STAFF" ? "Solo usará este número para iniciar sesión" : "Número identificativo único"}
+              {role === "STAFF" ? "Identifica al empleado en el POS" : "Número identificativo único"}
+            </p>
+          </div>
+
+          {/* PIN — used to identify the waiter at the table on the POS terminal */}
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+              PIN del POS <span className="text-gray-400 font-normal normal-case">(4 a 6 dígitos)</span>
+            </label>
+            <input
+              name="pin"
+              inputMode="numeric"
+              pattern="\d{4,6}"
+              maxLength={6}
+              placeholder="Ej. 1234"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm tracking-[0.3em] text-gray-900 placeholder:tracking-normal placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Lo teclea al tomar comandas en la mesa. Puedes dejarlo vacío y asignarlo después.
             </p>
           </div>
 

@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import Order from '@/models/Order';
 import Table from '@/models/Table';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { getBusinessContext } from '@/lib/pos-auth';
+import { verifyWaiterToken, signWaiterToken } from '@/lib/waiter-token';
 
 export async function GET(req: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user?.businessId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getBusinessContext();
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const tableId = searchParams.get('tableId');
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
   await dbConnect();
 
   const filter: Record<string, unknown> = {
-    businessId: new mongoose.Types.ObjectId(session.user.businessId),
+    businessId: ctx.businessId,
     status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] },
   };
 
@@ -27,44 +28,61 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user?.businessId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const ctx = await getBusinessContext();
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
   const { tableId, items } = await req.json();
 
   if (!tableId) return NextResponse.json({ error: 'tableId requerido' }, { status: 400 });
 
-  const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+  // The acting waiter (if a valid PIN token is present); otherwise the
+  // logged-in terminal user (e.g. the manager) owns the order.
+  const hdrs = await headers();
+  const waiter = verifyWaiterToken(hdrs.get('x-waiter-token'), ctx.businessIdStr);
+  const actingStaffId = new mongoose.Types.ObjectId(waiter?.staffId ?? ctx.userId);
 
   // Verify table belongs to business
   const table = await Table.findOne({
     _id: new mongoose.Types.ObjectId(tableId),
-    businessId,
+    businessId: ctx.businessId,
   });
   if (!table) return NextResponse.json({ error: 'Mesa no encontrada' }, { status: 404 });
 
   // Ensure no active order exists for this table
   const existing = await Order.findOne({
     tableId: new mongoose.Types.ObjectId(tableId),
-    businessId,
+    businessId: ctx.businessId,
     status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] },
   });
-  if (existing) return NextResponse.json(existing);
+  if (existing) return jsonWithRefreshedToken(existing, waiter, ctx.businessIdStr);
 
-  const total = (items ?? []).reduce(
-    (sum: number, i: { price: number; quantity: number }) => sum + i.price * i.quantity,
-    0
-  );
+  const incoming: Array<{ price: number; quantity: number }> = items ?? [];
+  const total = incoming.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
   const order = await Order.create({
     tableId: new mongoose.Types.ObjectId(tableId),
     tableName: table.name || `Mesa ${table.number}`,
-    businessId,
-    staffId: new mongoose.Types.ObjectId(session.user.id),
-    items: items ?? [],
+    businessId: ctx.businessId,
+    staffId: actingStaffId,
+    items: (items ?? []).map((i: Record<string, unknown>) => ({ ...i, addedBy: actingStaffId })),
     total,
   });
 
-  return NextResponse.json(order, { status: 201 });
+  return jsonWithRefreshedToken(order, waiter, ctx.businessIdStr, 201);
+}
+
+// Rolls the waiter's activity window forward by re-issuing a token on each
+// successful action, so an actively-working waiter never re-types the PIN.
+function jsonWithRefreshedToken(
+  body: unknown,
+  waiter: { staffId: string; staffName: string } | null,
+  businessId: string,
+  status = 200
+) {
+  const res = NextResponse.json(body, { status });
+  if (waiter) {
+    res.headers.set('x-waiter-token', signWaiterToken(waiter.staffId, waiter.staffName, businessId));
+  }
+  return res;
 }

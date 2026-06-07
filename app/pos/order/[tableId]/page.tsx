@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import OrderBuilder from '@/components/pos/OrderBuilder';
+import WaiterPinModal from '@/components/pos/WaiterPinModal';
+import { getActiveWaiter } from '@/lib/waiter-session';
 
 interface EmployeeSession {
   employeeId: string;
@@ -62,6 +64,9 @@ export default function POSOrderPage({
   const [products, setProducts] = useState<Product[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  // Who is taking this order. null = not yet resolved (show PIN);
+  // { name } = a waiter via PIN; { name: manager } = "continue as manager".
+  const [waiter, setWaiter] = useState<{ staffName: string } | null | undefined>(undefined);
 
   async function fetchData(tId: string, employeeSession: EmployeeSession) {
     try {
@@ -112,6 +117,10 @@ export default function POSOrderPage({
       const employeeSession = JSON.parse(stored) as EmployeeSession;
       setSession(employeeSession);
 
+      // If a waiter is already active (within the 90s window), skip the PIN.
+      const active = getActiveWaiter();
+      if (active) setWaiter({ staffName: active.staffName });
+
       // Get table ID from params
       const p = await params;
       setTableId(p.tableId);
@@ -148,12 +157,29 @@ export default function POSOrderPage({
     );
   }
 
+  const tableLabel = table.name || `Mesa ${table.number}`;
+
+  // Gate: require a waiter (PIN) or an explicit "continue as manager" before
+  // building the order.
+  if (waiter === undefined) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <WaiterPinModal
+          tableName={tableLabel}
+          onAuthenticated={(w) =>
+            setWaiter({ staffName: w?.staffName ?? session.employeeName })
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <OrderBuilder
       tableId={tableId}
-      tableName={table.name || `Mesa ${table.number}`}
+      tableName={tableLabel}
       businessName={business.name}
-      staffName={session.employeeName}
+      staffName={waiter?.staffName || session.employeeName}
       ticketConfig={business.ticket}
       products={products}
       initialOrder={order}
