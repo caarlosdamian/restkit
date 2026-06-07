@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 import { LogOut, Clock, Users } from "lucide-react";
 import POSSessionStart from "@/components/pos/POSSessionStart";
 import Link from "next/link";
+import { authClient } from "@/lib/auth-client";
 
+// Display-only snapshot cached after the terminal logs in. Never used for
+// authorization — the server derives identity from the session cookie.
 interface EmployeeSession {
-  employeeId: string;
   employeeName: string;
-  employeeNumber: string;
-  businessId: string;
   role: string;
+  businessId?: string;
+  employeeNumber?: string;
 }
 
 interface Table {
@@ -51,8 +53,6 @@ export default function POSDashboard() {
 
       const tablesRes = await fetch("/api/waiter/available-tables", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessId: employeeSession.businessId }),
       });
 
       if (tablesRes.ok) {
@@ -61,7 +61,7 @@ export default function POSDashboard() {
       }
 
       // Fetch POS session
-      const sessionRes = await fetch(`/api/pos-session/current?employeeNumber=${encodeURIComponent(employeeSession.employeeNumber)}`);
+      const sessionRes = await fetch("/api/pos-session/current");
       if (sessionRes.ok) {
         const sessionData = await sessionRes.json();
         setPOSSession(sessionData.session);
@@ -71,8 +71,9 @@ export default function POSDashboard() {
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
     localStorage.removeItem("posEmployeeSession");
+    await authClient.signOut();
     router.push("/pos");
   }
 
@@ -153,7 +154,8 @@ export default function POSDashboard() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500">
-              👤 {session.employeeName} #{session.employeeNumber}
+              👤 {session.employeeName}
+              {session.employeeNumber ? ` #${session.employeeNumber}` : ""}
             </p>
             <h1 className="text-2xl font-extrabold text-gray-900 mt-1">POS — Mesas</h1>
           </div>

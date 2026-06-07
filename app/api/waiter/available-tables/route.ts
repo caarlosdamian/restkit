@@ -1,29 +1,24 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
-import mongoose from 'mongoose';
 import Table from '@/models/Table';
+import { getBusinessContext } from '@/lib/pos-auth';
 
-export async function POST(req: Request) {
+// businessId is derived from the session, never from the request body.
+export async function POST() {
+  const ctx = await getBusinessContext();
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   await dbConnect();
-  const body = await req.json();
-  const { businessId } = body;
 
-  if (!businessId) {
-    return NextResponse.json({ error: 'Business ID required' }, { status: 400 });
-  }
-
-  const bId = new mongoose.Types.ObjectId(businessId);
-
-  // Get all active tables for this business
   const tables = await Table.aggregate([
-    { $match: { businessId: bId, isActive: true } },
+    { $match: { businessId: ctx.businessId, isActive: true } },
     { $sort: { number: 1 } },
   ]);
 
   return NextResponse.json({
     success: true,
     tables: tables.map((t) => ({
-      id: t._id.toString(),
+      _id: t._id.toString(),
       number: t.number,
       name: t.name,
       capacity: t.capacity,

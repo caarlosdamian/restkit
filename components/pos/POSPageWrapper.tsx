@@ -24,15 +24,7 @@ export default function POSPageWrapper({
 
   async function fetchSession() {
     try {
-      const posEmployeeSession = window.localStorage.getItem("posEmployeeSession");
-      if (!posEmployeeSession) {
-        setLoading(false);
-        return;
-      }
-
-      const session = JSON.parse(posEmployeeSession);
-      console.log('=_+_+_+',session)
-      const res = await fetch(`/api/pos-session/current?employeeNumber=${encodeURIComponent(session.employeeNumber)}`);
+      const res = await fetch("/api/pos-session/current");
       if (res.ok) {
         const data = await res.json();
         setPOSSession(data.session);
@@ -42,8 +34,7 @@ export default function POSPageWrapper({
     }
   }
 
-    useEffect(() => {
-      console.log('entrando')
+  useEffect(() => {
     fetchSession();
   }, []);
 
@@ -51,8 +42,6 @@ export default function POSPageWrapper({
     fetchSession();
   }
 
-
-  console.log('posSession',posSession)
   if (loading) {
     return <div className="p-6 text-center">Cargando...</div>;
   }

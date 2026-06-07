@@ -2,34 +2,25 @@ import { NextResponse } from 'next/server';
 import POSSession from '@/models/POSSession';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { getBusinessContext, isManager } from '@/lib/pos-auth';
 
 export async function POST(req: Request) {
+  const ctx = await getBusinessContext();
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isManager(ctx)) {
+    return NextResponse.json({ error: 'Solo un gerente puede abrir la caja' }, { status: 403 });
+  }
+
   await dbConnect();
-  const body = await req.json();
-  const { openingBalance, employeeNumber } = body;
+  const { openingBalance } = await req.json();
 
-  if (openingBalance === undefined || !employeeNumber) {
-    return NextResponse.json(
-      { error: 'Opening balance and employee number required' },
-      { status: 400 }
-    );
+  if (openingBalance === undefined) {
+    return NextResponse.json({ error: 'Opening balance required' }, { status: 400 });
   }
-
-  // For POS, we use the employee number from the request
-  // Find the employee to get their business ID
-  const employee = await mongoose.connection
-    .collection('user')
-    .findOne({ employeeNumber: employeeNumber.trim() });
-
-  if (!employee) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const bId = new mongoose.Types.ObjectId(employee.businessId);
 
   // Check if there's already an open session for this business
   const existingSession = await POSSession.findOne({
-    businessId: bId,
+    businessId: ctx.businessId,
     status: 'OPEN',
   });
 
@@ -47,11 +38,10 @@ export async function POST(req: Request) {
     );
   }
 
-  // Create new session
   const newSession = new POSSession({
-    businessId: bId,
-    staffId: new mongoose.Types.ObjectId(employee._id),
-    staffName: employee.name,
+    businessId: ctx.businessId,
+    staffId: new mongoose.Types.ObjectId(ctx.userId),
+    staffName: ctx.userName,
     openingBalance: Number(openingBalance),
     startedAt: new Date(),
     totalSales: 0,
@@ -69,7 +59,7 @@ export async function POST(req: Request) {
     {
       success: true,
       sessionId: newSession._id.toString(),
-      message: `POS session opened with $${openingBalance.toFixed(2)} opening balance`,
+      message: `POS session opened with $${Number(openingBalance).toFixed(2)} opening balance`,
     },
     { status: 201 }
   );

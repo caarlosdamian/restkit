@@ -1,54 +1,36 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
 import POSSession from '@/models/POSSession';
 import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
-import mongoose from 'mongoose';
+import { getBusinessContext, isManager } from '@/lib/pos-auth';
 
 export async function POST(req: Request) {
+  const ctx = await getBusinessContext();
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!isManager(ctx)) {
+    return NextResponse.json({ error: 'Solo un gerente puede cerrar la caja' }, { status: 403 });
+  }
+
   await dbConnect();
-  const body = await req.json();
-  const { closingBalance, notes, employeeNumber } = body;
-
-  if (!employeeNumber) {
-    return NextResponse.json({ error: 'Employee number required' }, { status: 400 });
-  }
-
-  // Get employee to find their business
-  const employee = await mongoose.connection
-    .collection('user')
-    .findOne({ employeeNumber: employeeNumber.trim() });
-
-  if (!employee) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const bId = new mongoose.Types.ObjectId(employee.businessId);
+  const { closingBalance, notes } = await req.json();
 
   if (closingBalance === undefined) {
-    return NextResponse.json(
-      { error: 'Closing balance required' },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: 'Closing balance required' }, { status: 400 });
   }
 
   // Get the open session
   const posSession = await POSSession.findOne({
-    businessId: bId,
+    businessId: ctx.businessId,
     status: 'OPEN',
   });
 
   if (!posSession) {
-    return NextResponse.json(
-      { error: 'No open POS session found' },
-      { status: 404 }
-    );
+    return NextResponse.json({ error: 'No open POS session found' }, { status: 404 });
   }
 
   // Calculate sales since session opened
   const paidOrders = await Order.find({
-    businessId: bId,
+    businessId: ctx.businessId,
     status: 'PAID',
     closedAt: { $gte: posSession.startedAt },
   });

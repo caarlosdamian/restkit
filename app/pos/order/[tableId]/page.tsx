@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import OrderBuilder from "@/components/pos/OrderBuilder";
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import OrderBuilder from '@/components/pos/OrderBuilder';
 
 interface EmployeeSession {
   employeeId: string;
@@ -49,7 +49,11 @@ interface Table {
   name: string;
 }
 
-export default function POSOrderPage({ params }: { params: Promise<{ tableId: string }> }) {
+export default function POSOrderPage({
+  params,
+}: {
+  params: Promise<{ tableId: string }>;
+}) {
   const router = useRouter();
   const [tableId, setTableId] = useState<string | null>(null);
   const [session, setSession] = useState<EmployeeSession | null>(null);
@@ -59,12 +63,49 @@ export default function POSOrderPage({ params }: { params: Promise<{ tableId: st
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function fetchData(tId: string, employeeSession: EmployeeSession) {
+    try {
+      // Fetch table
+      const tableRes = await fetch(`/api/tables/${tId}?businessId=${employeeSession.businessId}`);
+      if (tableRes.ok) {
+        setTable(await tableRes.json());
+      }
+
+      // Fetch business
+      const bizRes = await fetch('/api/settings');
+      if (bizRes.ok) {
+        const bizData = await bizRes.json();
+        setBusiness(bizData);
+      }
+
+      // Fetch products
+      const productsRes = await fetch('/api/products');
+      if (productsRes.ok) {
+        const productsData = await productsRes.json();
+        setProducts(productsData);
+      }
+
+      // Fetch active order for table
+      const orderRes = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId: tId }),
+      });
+      if (orderRes.ok) {
+        const orderData = await orderRes.json();
+        setOrder(orderData);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
     (async () => {
       // Check POS employee session
-      const stored = window.localStorage.getItem("posEmployeeSession");
+      const stored = window.localStorage.getItem('posEmployeeSession');
       if (!stored) {
-        router.push("/pos");
+        router.push('/pos');
         return;
       }
 
@@ -79,43 +120,6 @@ export default function POSOrderPage({ params }: { params: Promise<{ tableId: st
       await fetchData(p.tableId, employeeSession);
     })();
   }, [params, router]);
-
-  async function fetchData(tId: string, employeeSession: EmployeeSession) {
-    try {
-      // Fetch table
-      const tableRes = await fetch(`/api/tables/${tId}`);
-      if (tableRes.ok) {
-        setTable(await tableRes.json());
-      }
-
-      // Fetch business
-      const bizRes = await fetch("/api/settings");
-      if (bizRes.ok) {
-        const bizData = await bizRes.json();
-        setBusiness(bizData);
-      }
-
-      // Fetch products
-      const productsRes = await fetch("/api/products");
-      if (productsRes.ok) {
-        const productsData = await productsRes.json();
-        setProducts(productsData);
-      }
-
-      // Fetch active order for table
-      const orderRes = await fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tableId: tId }),
-      });
-      if (orderRes.ok) {
-        const orderData = await orderRes.json();
-        setOrder(orderData);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (loading || !tableId || !session) {
     return (

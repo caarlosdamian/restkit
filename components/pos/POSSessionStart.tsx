@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Power, DollarSign, AlertCircle } from "lucide-react";
 
 interface POSSessionStartProps {
-  employeeNumber: string;
+  employeeNumber?: string;
   employeeName: string;
   onSessionStarted: (sessionId: string) => void;
 }
@@ -33,7 +33,6 @@ export default function POSSessionStart({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           openingBalance: Number(openingBalance),
-          employeeNumber,
         }),
       });
 
@@ -74,7 +73,8 @@ export default function POSSessionStart({
         <div className="bg-gray-50 rounded-xl p-4 space-y-2">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500">Empleado</p>
           <p className="text-sm font-semibold text-gray-900">
-            {employeeName} <span className="text-gray-400 font-normal">#{employeeNumber}</span>
+            {employeeName}
+            {employeeNumber && <span className="text-gray-400 font-normal"> #{employeeNumber}</span>}
           </p>
         </div>
 

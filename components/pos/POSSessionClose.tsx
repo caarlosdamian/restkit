@@ -37,21 +37,12 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
     setError("");
 
     try {
-      const posEmployeeSession = window.localStorage.getItem("posEmployeeSession");
-      if (!posEmployeeSession) {
-        setError("Sesión POS no encontrada");
-        setLoading(false);
-        return;
-      }
-
-      const session = JSON.parse(posEmployeeSession);
       const res = await fetch("/api/pos-session/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           closingBalance: Number(closingBalance),
           notes: notes || undefined,
-          employeeNumber: session.employeeNumber,
         }),
       });
 

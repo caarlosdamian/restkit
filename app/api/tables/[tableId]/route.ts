@@ -7,6 +7,26 @@ import mongoose from 'mongoose';
 
 type Params = Promise<{ tableId: string }>;
 
+export async function GET(req: Request, { params }: { params: Params }) {
+  const { searchParams } = new URL(req.url);
+  const businessId = searchParams.get('businessId');
+
+  if (!businessId) {
+    return NextResponse.json({ error: 'Business ID required' }, { status: 400 });
+  }
+
+  await dbConnect();
+  const { tableId } = await params;
+
+  const table = await Table.findOne({
+    _id: new mongoose.Types.ObjectId(tableId),
+    businessId: new mongoose.Types.ObjectId(businessId),
+  });
+
+  if (!table) return NextResponse.json({ error: 'Mesa no encontrada' }, { status: 404 });
+  return NextResponse.json(table);
+}
+
 export async function PATCH(req: Request, { params }: { params: Params }) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {

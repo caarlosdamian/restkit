@@ -2,21 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, AlertCircle, UtensilsCrossed } from "lucide-react";
+import { LogIn, AlertCircle, UtensilsCrossed, Mail, Lock } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
 
 export default function POSLoginPage() {
   const router = useRouter();
-  const [employeeNumber, setEmployeeNumber] = useState("");
-  const [restaurantCode, setRestaurantCode] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Check if already logged in to POS
+  // If the terminal already has a valid Better Auth session, go straight in.
   useEffect(() => {
-    const posSession = window.localStorage.getItem("posEmployeeSession");
-    if (posSession) {
-      router.push("/pos/dashboard");
-    }
+    let active = true;
+    authClient.getSession().then(({ data }) => {
+      if (active && data?.session) router.push("/pos/dashboard");
+    });
+    return () => {
+      active = false;
+    };
   }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -24,59 +28,33 @@ export default function POSLoginPage() {
     setError("");
     setLoading(true);
 
-    try {
-      // Get restaurant code from window.localStorage if available
-      // Or use the code entered if this is the first time
-      const code = restaurantCode || window.localStorage.getItem("restaurantCode");
-
-      if (!code) {
-        setError("Se requiere un código de restaurante");
-        setLoading(false);
-        return;
+    await authClient.signIn.email(
+      { email: email.trim(), password },
+      {
+        onError: (ctx) => {
+          setError(ctx.error.message || "Credenciales inválidas");
+          setLoading(false);
+        },
+        onSuccess: async () => {
+          // Cache a display-only snapshot. This is NOT used for authorization;
+          // the server always derives identity from the session cookie.
+          const { data } = await authClient.getSession();
+          const user = data?.user as
+            | { name?: string; role?: string; businessId?: string }
+            | undefined;
+          window.localStorage.setItem(
+            "posEmployeeSession",
+            JSON.stringify({
+              employeeName: user?.name ?? "",
+              role: user?.role ?? "STAFF",
+              businessId: user?.businessId ?? "",
+            })
+          );
+          router.push("/pos/dashboard");
+          router.refresh();
+        },
       }
-
-      // Call API to validate employee number
-      const res = await fetch("/api/pos/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeNumber: employeeNumber.trim(),
-          restaurantCode: code,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Empleado no encontrado");
-        setLoading(false);
-        return;
-      }
-
-      // Store POS session (separate from admin session)
-      window.localStorage.setItem(
-        "posEmployeeSession",
-        JSON.stringify({
-          employeeId: data.employeeId,
-          employeeName: data.employeeName,
-          employeeNumber: data.employeeNumber,
-          businessId: data.businessId,
-          role: data.role,
-        })
-      );
-
-      // Store restaurant code for future logins
-      if (restaurantCode) {
-        window.localStorage.setItem("restaurantCode", code);
-      }
-
-      router.push("/pos/dashboard");
-      router.refresh();
-    } catch (err: any) {
-      setError(err.message || "Error al conectar");
-    } finally {
-      setLoading(false);
-    }
+    );
   }
 
   return (
@@ -96,46 +74,48 @@ export default function POSLoginPage() {
         {/* Card */}
         <div className="rounded-3xl bg-white shadow-2xl p-8 space-y-6">
           <div className="text-center">
-            <h2 className="text-2xl font-extrabold text-gray-900">Inicia Sesión</h2>
-            <p className="text-sm text-gray-500 mt-1">Ingresa con tu número de empleado</p>
+            <h2 className="text-2xl font-extrabold text-gray-900">Abrir terminal</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Un gerente inicia sesión para habilitar esta terminal
+            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            {/* Restaurant Code */}
+            {/* Email */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-                Código del Restaurante
+                Correo del gerente
               </label>
-              <input
-                type="text"
-                value={restaurantCode}
-                onChange={(e) => setRestaurantCode(e.target.value.toUpperCase())}
-                placeholder="Ej. REST-001"
-                disabled={loading || !!window.localStorage.getItem("restaurantCode")}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-center text-lg font-semibold text-gray-900 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <p className="text-xs text-gray-400 mt-1">
-                {window.localStorage.getItem("restaurantCode")
-                  ? `Restaurante: ${window.localStorage.getItem("restaurantCode")}`
-                  : "Tu gerente te proporcionará este código"}
-              </p>
+              <div className="relative">
+                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="gerente@correo.com"
+                  disabled={loading}
+                  autoFocus
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50"
+                />
+              </div>
             </div>
 
-            {/* Employee Number */}
+            {/* Password */}
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-2">
-                Número de Empleado <span className="text-red-500">*</span>
+                Contraseña
               </label>
-              <input
-                type="text"
-                value={employeeNumber}
-                onChange={(e) => setEmployeeNumber(e.target.value)}
-                placeholder="Ej. 001, 002, 003..."
-                disabled={loading}
-                autoFocus
-                maxLength={10}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-center text-lg font-bold text-gray-900 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50"
-              />
+              <div className="relative">
+                <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 focus:border-amber-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50"
+                />
+              </div>
             </div>
 
             {/* Error */}
@@ -149,11 +129,11 @@ export default function POSLoginPage() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={!employeeNumber.trim() || loading}
+              disabled={!email.trim() || !password || loading}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white text-sm font-extrabold disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg"
             >
               <LogIn size={18} />
-              {loading ? "Validando..." : "Entrar al POS"}
+              {loading ? "Validando..." : "Abrir terminal"}
             </button>
           </form>
 
@@ -163,15 +143,15 @@ export default function POSLoginPage() {
             <ul className="text-xs text-amber-800 space-y-1.5">
               <li className="flex gap-2">
                 <span className="shrink-0">1.</span>
-                <span>Tu gerente te dará un código de restaurante</span>
+                <span>El gerente abre la terminal con su cuenta al iniciar el turno</span>
               </li>
               <li className="flex gap-2">
                 <span className="shrink-0">2.</span>
-                <span>Ingresa tu número de empleado</span>
+                <span>La terminal queda activa hasta el cierre de caja</span>
               </li>
               <li className="flex gap-2">
                 <span className="shrink-0">3.</span>
-                <span>Accede al sistema POS</span>
+                <span>Los meseros se identifican con su PIN al tomar comandas</span>
               </li>
             </ul>
           </div>
@@ -179,7 +159,10 @@ export default function POSLoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-gray-500 mt-6">
-          ¿Eres propietario? <a href="/login" className="font-semibold text-amber-600 hover:underline">Ir a administrador</a>
+          ¿Eres propietario?{" "}
+          <a href="/login" className="font-semibold text-amber-600 hover:underline">
+            Ir a administrador
+          </a>
         </p>
       </div>
     </div>
