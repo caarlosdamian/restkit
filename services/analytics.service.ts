@@ -1,7 +1,10 @@
 import Customer from '@/models/Customer';
 import Visit from '@/models/Visit';
+import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+
+export type ReportPeriod = 'today' | 'week' | 'month';
 
 function startOfToday(): Date {
   const d = new Date();
@@ -123,6 +126,73 @@ export const analyticsService = {
         type: v.type as 'VISIT' | 'REWARD_REDEMPTION',
         timeAgo: relativeTime(v.createdAt as Date),
       })),
+    };
+  },
+
+  /**
+   * Sales attributed to each waiter (Fase 3 trazabilidad). Revenue is split at
+   * the item level by `items.addedBy`, falling back to the order owner
+   * (`staffId`) for lines created before per-item attribution existed.
+   */
+  async getWaiterSales(businessId: string, period: ReportPeriod) {
+    await dbConnect();
+    const bId = new mongoose.Types.ObjectId(businessId);
+
+    const since = startOfToday();
+    if (period === 'week') since.setDate(since.getDate() - 6);
+    if (period === 'month') since.setDate(since.getDate() - 29);
+
+    const rows = await Order.aggregate([
+      { $match: { businessId: bId, status: 'PAID', closedAt: { $gte: since } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: { $ifNull: ['$items.addedBy', '$staffId'] },
+          total: { $sum: { $multiply: ['$items.price', '$items.quantity'] } },
+          itemCount: { $sum: '$items.quantity' },
+          orders: { $addToSet: '$_id' },
+        },
+      },
+      {
+        $project: {
+          total: 1,
+          itemCount: 1,
+          orderCount: { $size: '$orders' },
+        },
+      },
+      { $sort: { total: -1 } },
+    ]);
+
+    // Resolve waiter names from the Better Auth `user` collection.
+    const ids = rows
+      .map((r) => r._id)
+      .filter(Boolean)
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const users = ids.length
+      ? await mongoose.connection
+          .collection('user')
+          .find({ _id: { $in: ids } }, { projection: { name: 1 } })
+          .toArray()
+      : [];
+
+    const nameById = new Map(users.map((u) => [u._id.toString(), u.name as string]));
+
+    const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+    return {
+      grandTotal,
+      waiters: rows.map((r) => {
+        const id = r._id ? r._id.toString() : null;
+        return {
+          staffId: id,
+          name: (id && nameById.get(id)) || 'Sin asignar',
+          total: r.total as number,
+          itemCount: r.itemCount as number,
+          orderCount: r.orderCount as number,
+          share: grandTotal > 0 ? r.total / grandTotal : 0,
+        };
+      }),
     };
   },
 };

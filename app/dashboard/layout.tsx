@@ -55,6 +55,9 @@ export default async function DashboardLayout({
           {canSeeAnalytics && (
             <NavLink href="/dashboard/orders" icon={ClipboardList} label="Historial" />
           )}
+          {canSeeAnalytics && (
+            <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" />
+          )}
 
           {/* Owner only */}
           {isOwner && (
@@ -68,9 +71,6 @@ export default async function DashboardLayout({
           {[
             { icon: Monitor, label: "Cocina (KDS)" },
             { icon: Package, label: "Inventario" },
-            ...(canSeeAnalytics
-              ? [{ icon: BarChart3, label: "Reportes" }]
-              : []),
             { icon: FileText, label: "Facturación" },
             { icon: Truck, label: "Delivery" },
           ].map(({ icon: Icon, label }) => (

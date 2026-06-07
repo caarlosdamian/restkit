@@ -17,6 +17,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
+  
   const staff = await mongoose.connection
     .collection('user')
     .find(

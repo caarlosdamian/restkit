@@ -64,6 +64,18 @@ export default async function OrdersPage({
     businessRepository.findById(session.user.businessId),
   ]);
 
+  // Resolve the waiter (order owner) names in a single lookup for trazabilidad.
+  const staffIds = [
+    ...new Set(orders.map((o) => o.staffId?.toString()).filter(Boolean) as string[]),
+  ].map((id) => new mongoose.Types.ObjectId(id));
+  const staffUsers = staffIds.length
+    ? await mongoose.connection
+        .collection("user")
+        .find({ _id: { $in: staffIds } }, { projection: { name: 1 } })
+        .toArray()
+    : [];
+  const staffNameById = new Map(staffUsers.map((u) => [u._id.toString(), u.name as string]));
+
   // Stats (paid orders only)
   const paidOrders = orders.filter((o) => o.status === "PAID");
   const totalRevenue = paidOrders.reduce((s, o) => s + o.total, 0);
@@ -187,7 +199,12 @@ export default async function OrdersPage({
                         {cfg.label}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{summary}{extra}</p>
+                    <p className="text-xs text-gray-400 truncate mt-0.5">
+                      {summary}{extra}
+                      {staffNameById.get(order.staffId?.toString()) && (
+                        <span className="text-gray-300"> · {staffNameById.get(order.staffId?.toString())}</span>
+                      )}
+                    </p>
                   </div>
 
                   {/* Payment method */}
