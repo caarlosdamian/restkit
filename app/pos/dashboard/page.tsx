@@ -278,7 +278,7 @@ export default function POSDashboard() {
               <button
                 key={key}
                 onClick={() => setFilter(key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors active:scale-95 ${
                   filter === key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
@@ -323,7 +323,7 @@ export default function POSDashboard() {
                   {!hasOrder && (
                     <button
                       onClick={() => toggleBusy(table)}
-                      className={`absolute top-2.5 right-2.5 z-10 text-[0.65rem] font-bold px-2 py-1 rounded-full border transition-colors ${
+                      className={`absolute top-2 right-2 z-10 text-xs font-bold px-3 py-2 rounded-full border active:scale-95 transition-all ${
                         table.isOccupied
                           ? "bg-white border-rose-200 text-rose-600 hover:bg-rose-100"
                           : "bg-white border-gray-200 text-gray-500 hover:bg-gray-100"

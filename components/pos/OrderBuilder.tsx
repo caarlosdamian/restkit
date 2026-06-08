@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer, StickyNote, X } from "lucide-react";
 import PaymentModal from "./PaymentModal";
 import { waiterHeader, refreshWaiterFromResponse } from "@/lib/waiter-session";
 import { printReceipt } from "@/lib/receipt-html";
@@ -66,7 +66,15 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   const [activeCategory, setActiveCategory] = useState("all");
   const [search, setSearch]     = useState("");
   const [activeTab, setActiveTab] = useState<"menu" | "order">("menu");
+  // Per-item special note editor (allergies, "sin leche de vaca", etc.)
+  const [noteEditing, setNoteEditing] = useState<{ productId: string; name: string } | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const NOTE_PRESETS = [
+    "Sin azúcar", "Sin leche de vaca", "Leche deslactosada",
+    "Sin gluten", "Sin cebolla", "Alergia", "Para llevar", "Bien cocido",
+  ];
 
   // Check if POS session is open
   useEffect(() => {
@@ -160,7 +168,8 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       scheduleSave(next);
       return next;
     });
-    setActiveTab("order");
+    // Stay on the menu so the waiter can keep tapping products fast; the
+    // sticky bottom bar shows the running total and the send-to-kitchen action.
   }
 
   function updateQty(productId: string, delta: number) {
@@ -171,6 +180,25 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       scheduleSave(next);
       return next;
     });
+  }
+
+  // ── Per-item notes ──
+  function openNote(item: OrderItem) {
+    setNoteDraft(item.notes ?? "");
+    setNoteEditing({ productId: item.productId, name: item.name });
+  }
+
+  function saveNote() {
+    if (!noteEditing) return;
+    const note = noteDraft.trim();
+    setItems((prev) => {
+      const next = prev.map((i) =>
+        i.productId === noteEditing.productId ? { ...i, notes: note || undefined } : i
+      );
+      scheduleSave(next);
+      return next;
+    });
+    setNoteEditing(null);
   }
 
   // Send to kitchen (works from any active status)
@@ -242,7 +270,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       footerMessage: ticketConfig.footerMessage,
       tableName,
       staffName,
-      items: items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      items: items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, notes: i.notes })),
       total,
       closedAt: new Date(),
     });
@@ -261,15 +289,15 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-[100dvh] p-3 sm:p-5">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-5">
+      <div className="flex items-center gap-4 mb-4">
         <button
           onClick={() => router.push("/pos/dashboard")}
-          className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-500"
+          className="p-3 rounded-xl hover:bg-gray-100 active:scale-95 transition-all text-gray-500"
           title="Volver"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={20} />
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-extrabold tracking-tight text-gray-900">{tableName}</h1>
@@ -320,23 +348,23 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
         <div className={`flex flex-col min-h-0 ${activeTab === "order" ? "hidden lg:flex" : "flex"}`}>
           <div className="space-y-3 mb-4">
             <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar producto…"
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                className="w-full pl-11 pr-4 py-3.5 rounded-xl border border-gray-200 bg-gray-50 text-base focus:outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all"
               />
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-1 px-1">
               {categories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  className={`shrink-0 px-5 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 ${
                     activeCategory === cat
-                      ? "bg-emerald-500 text-white"
-                      : "bg-white border border-gray-200 text-gray-600 hover:border-emerald-300"
+                      ? "bg-emerald-500 text-white shadow-sm"
+                      : "bg-white border-2 border-gray-200 text-gray-600 hover:border-emerald-300"
                   }`}
                 >
                   {cat === "all" ? "Todos" : cat}
@@ -368,21 +396,21 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                     >
                       {/* Total qty badge */}
                       {inOrder && (
-                        <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-emerald-500 text-white text-[0.65rem] font-bold flex items-center justify-center">
+                        <span className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center">
                           {inOrder.quantity}
                         </span>
                       )}
                       {/* Pending badge (if some not yet sent) */}
                       {pendingQty > 0 && (
-                        <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-amber-400 text-white text-[0.6rem] font-bold flex items-center justify-center">
+                        <span className="absolute top-2.5 left-2.5 w-6 h-6 rounded-full bg-amber-400 text-white text-[0.65rem] font-bold flex items-center justify-center">
                           +{pendingQty}
                         </span>
                       )}
-                      <p className="text-[0.8rem] font-bold text-gray-900 leading-tight mb-1">{product.name}</p>
+                      <p className="text-sm font-bold text-gray-900 leading-tight mb-1">{product.name}</p>
                       {product.description && (
-                        <p className="text-[0.7rem] text-gray-400 leading-tight mb-2 line-clamp-2">{product.description}</p>
+                        <p className="text-xs text-gray-400 leading-tight mb-2 line-clamp-2">{product.description}</p>
                       )}
-                      <p className="text-sm font-extrabold text-emerald-600">${product.price.toFixed(2)}</p>
+                      <p className="text-base font-extrabold text-emerald-600">${product.price.toFixed(2)}</p>
                     </button>
                   );
                 })}
@@ -434,36 +462,56 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-semibold text-gray-900 truncate">{item.name}</p>
+                        <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
                         {pendingQty > 0 && !isPaid && (
                           <span className="text-[0.6rem] font-bold bg-amber-400 text-white px-1.5 py-0.5 rounded-full shrink-0">
                             +{pendingQty} nuevo{pendingQty > 1 ? "s" : ""}
                           </span>
                         )}
                       </div>
-                      <p className="text-[0.7rem] text-emerald-600 font-bold">
+                      <p className="text-xs text-emerald-600 font-bold">
                         ${(item.price * item.quantity).toFixed(2)}
                       </p>
+                      {item.notes && (
+                        <p className="flex items-start gap-1 text-[0.7rem] text-amber-700 mt-0.5">
+                          <StickyNote size={11} className="mt-0.5 shrink-0" />
+                          <span className="break-words">{item.notes}</span>
+                        </p>
+                      )}
                     </div>
 
+                    {!isPaid && (
+                      <button
+                        onClick={() => openNote(item)}
+                        title="Agregar nota"
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 active:scale-90 transition-all ${
+                          item.notes
+                            ? "bg-amber-100 text-amber-600 border border-amber-200"
+                            : "bg-white border border-gray-200 text-gray-400 hover:text-gray-600"
+                        }`}
+                      >
+                        <StickyNote size={16} />
+                      </button>
+                    )}
+
                     {!isPaid ? (
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => updateQty(item.productId, -1)}
-                          className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center hover:border-red-300 hover:text-red-500 transition-colors"
+                          className="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center hover:border-red-300 hover:text-red-500 active:scale-90 transition-all"
                         >
-                          {item.quantity === 1 ? <Trash2 size={11} /> : <Minus size={11} />}
+                          {item.quantity === 1 ? <Trash2 size={16} /> : <Minus size={16} />}
                         </button>
-                        <span className="w-5 text-center text-sm font-bold text-gray-900">{item.quantity}</span>
+                        <span className="w-7 text-center text-base font-bold text-gray-900">{item.quantity}</span>
                         <button
                           onClick={() => updateQty(item.productId, 1)}
-                          className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 transition-colors"
+                          className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 active:scale-90 transition-all"
                         >
-                          <Plus size={11} />
+                          <Plus size={16} />
                         </button>
                       </div>
                     ) : (
-                      <span className="text-sm font-bold text-gray-500 shrink-0">×{item.quantity}</span>
+                      <span className="text-base font-bold text-gray-500 shrink-0">×{item.quantity}</span>
                     )}
                   </div>
                 );
@@ -485,7 +533,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                   <button
                     onClick={sendToKitchen}
                     disabled={items.length === 0 || saving}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-3.5 text-base font-semibold disabled:opacity-40 active:scale-[0.98] transition-all"
                   >
                     <ChefHat size={16} />
                     {status === "OPEN"
@@ -499,7 +547,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                   <button
                     onClick={() => changeStatus("READY")}
                     disabled={saving}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 text-base font-semibold disabled:opacity-40 active:scale-[0.98] transition-all"
                   >
                     <Check size={16} /> Marcar como lista
                   </button>
@@ -509,7 +557,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                 <button
                   onClick={printPreBill}
                   disabled={items.length === 0}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 py-3.5 text-base font-semibold disabled:opacity-40 active:scale-[0.98] transition-all"
                 >
                   <Printer size={16} /> Imprimir cuenta
                 </button>
@@ -518,7 +566,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                 <button
                   onClick={() => setShowPayment(true)}
                   disabled={items.length === 0 || saving}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-emerald-500 text-emerald-700 hover:bg-emerald-50 py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-emerald-500 text-emerald-700 hover:bg-emerald-50 py-3.5 text-base font-semibold disabled:opacity-40 active:scale-[0.98] transition-all"
                 >
                   <CreditCard size={16} /> Cobrar ${total.toFixed(2)}
                 </button>
@@ -535,6 +583,99 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
           </div>
         </div>
       </div>
+
+      {/* Mobile sticky action bar — send to kitchen fast, no scroll, no tab switch */}
+      {!isPaid && activeTab === "menu" && items.length > 0 && (
+        <div className="lg:hidden mt-3 flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setActiveTab("order")}
+            className="flex flex-col items-start px-3 py-2 rounded-xl border border-gray-200 bg-white active:scale-95 transition-transform"
+          >
+            <span className="text-[0.6rem] text-gray-400 leading-none">
+              {items.reduce((s, i) => s + i.quantity, 0)} prod.
+            </span>
+            <span className="text-base font-extrabold text-gray-900 leading-tight">${total.toFixed(2)}</span>
+          </button>
+          {status === "OPEN" || pendingCount > 0 ? (
+            <button
+              onClick={sendToKitchen}
+              disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-3.5 text-sm font-bold disabled:opacity-40 transition-colors"
+            >
+              <ChefHat size={18} />
+              {status === "OPEN" ? "Enviar a cocina" : `Enviar ${pendingCount} a cocina`}
+            </button>
+          ) : (
+            <button
+              onClick={() => setActiveTab("order")}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 border-emerald-500 text-emerald-700 py-3.5 text-sm font-bold"
+            >
+              <CreditCard size={16} /> Ir a cobrar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Per-item note editor */}
+      {noteEditing && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-lg font-extrabold text-gray-900">Nota del producto</p>
+                <p className="text-sm text-gray-500">{noteEditing.name}</p>
+              </div>
+              <button
+                onClick={() => setNoteEditing(null)}
+                className="p-2 -mr-2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              autoFocus
+              rows={3}
+              placeholder="Ej. Sin leche de vaca, alergia a nueces…"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
+            />
+
+            {/* Quick presets */}
+            <div className="flex flex-wrap gap-2">
+              {NOTE_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() =>
+                    setNoteDraft((d) => (d.trim() ? `${d.trim()}, ${preset}` : preset))
+                  }
+                  className="px-3 py-2 rounded-full bg-gray-100 text-sm font-semibold text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+                >
+                  + {preset}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              {noteDraft.trim() && (
+                <button
+                  onClick={() => setNoteDraft("")}
+                  className="px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Limpiar
+                </button>
+              )}
+              <button
+                onClick={saveNote}
+                className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold active:scale-[0.98] transition-all"
+              >
+                Guardar nota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment modal */}
       {showPayment && orderId && (

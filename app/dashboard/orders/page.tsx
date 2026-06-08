@@ -230,7 +230,7 @@ export default async function OrdersPage({
                       order={{
                         ticketNumber: order.ticketNumber ?? order._id.toString().slice(-6).toUpperCase(),
                         tableName: order.tableName,
-                        items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+                        items: order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, notes: i.notes })),
                         total: order.total,
                         paymentMethod: order.paymentMethod ?? "OTHER",
                         amountReceived: order.amountReceived,

@@ -267,7 +267,7 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
               placeholder="0.00"
               disabled={loading}
               autoFocus
-              className="w-full pl-8 pr-4 py-3 rounded-xl border border-gray-200 text-lg font-bold text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
+              className="w-full pl-8 pr-4 py-3.5 rounded-xl border border-gray-200 text-xl font-bold text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
             />
           </div>
         </div>
@@ -299,9 +299,9 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
         <button
           onClick={handleCloseSession}
           disabled={!closingBalance || loading}
-          className="w-full py-3 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          className="w-full py-4 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-base font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all flex items-center justify-center gap-2"
         >
-          <Power size={16} />
+          <Power size={18} />
           {loading ? "Procesando..." : "Cerrar caja"}
         </button>
       </div>

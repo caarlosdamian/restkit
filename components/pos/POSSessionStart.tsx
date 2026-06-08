@@ -96,7 +96,7 @@ export default function POSSessionStart({
               placeholder="0.00"
               disabled={loading}
               autoFocus
-              className="w-full pl-8 pr-4 py-3 rounded-xl border border-gray-200 text-lg font-bold text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50"
+              className="w-full pl-8 pr-4 py-3.5 rounded-xl border border-gray-200 text-xl font-bold text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50"
             />
           </div>
         </div>
@@ -108,7 +108,7 @@ export default function POSSessionStart({
               key={amount}
               onClick={() => setOpeningBalance(String(amount))}
               disabled={loading}
-              className="py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-bold text-gray-700 disabled:opacity-50 transition-colors"
+              className="py-3 rounded-lg bg-gray-100 hover:bg-gray-200 text-base font-bold text-gray-700 disabled:opacity-50 active:scale-95 transition-all"
             >
               ${amount}
             </button>
@@ -127,9 +127,9 @@ export default function POSSessionStart({
         <button
           onClick={handleStartSession}
           disabled={!openingBalance || loading}
-          className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-base font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all flex items-center justify-center gap-2"
         >
-          <Power size={16} />
+          <Power size={18} />
           {loading ? "Abriendo caja..." : "Abrir caja"}
         </button>
 

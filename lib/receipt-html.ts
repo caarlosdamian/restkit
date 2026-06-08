@@ -12,7 +12,7 @@ export interface ReceiptData {
   footerMessage?: string;
   tableName: string;
   staffName: string;
-  items: Array<{ name: string; quantity: number; price: number }>;
+  items: Array<{ name: string; quantity: number; price: number; notes?: string }>;
   total: number;
   paymentMethod?: string;
   amountReceived?: number;
@@ -47,6 +47,23 @@ function row(left: string, right: string): string {
 
 const DIV = '─'.repeat(W);
 const DASH = '- '.repeat(W / 2);
+
+// Word-wrap a string to a max width (for multi-line item notes).
+function wrap(text: string, width: number): string[] {
+  const words = text.split(/\s+/);
+  const out: string[] = [];
+  let line = '';
+  for (const w of words) {
+    if (line && (line + ' ' + w).length > width) {
+      out.push(line);
+      line = w;
+    } else {
+      line = line ? `${line} ${w}` : w;
+    }
+  }
+  if (line) out.push(line);
+  return out.length ? out : [''];
+}
 
 export function generateReceiptHtml(data: ReceiptData): string {
   const date = new Date(data.closedAt);
@@ -89,6 +106,12 @@ export function generateReceiptHtml(data: ReceiptData): string {
     // unit price if qty > 1
     if (item.quantity > 1) {
       lines.push(row(`   @$${item.price.toFixed(2)} c/u`, ''));
+    }
+    // special note (allergies, "sin leche", etc.)
+    if (item.notes) {
+      for (const noteLine of wrap(`* ${item.notes}`, W - 3)) {
+        lines.push(`   ${noteLine}`);
+      }
     }
   }
   lines.push(DASH);
