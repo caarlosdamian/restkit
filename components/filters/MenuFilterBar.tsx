@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import Link from "next/link";
 
 export default function MenuFilterBar({
@@ -89,7 +90,7 @@ export default function MenuFilterBar({
                 )}
                 className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-xs font-semibold hover:bg-emerald-200 transition-colors no-underline"
               >
-                ✕ {filter.label}
+                <X size={12} /> {filter.label}
               </Link>
             ))}
           </div>

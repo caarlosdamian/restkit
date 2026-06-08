@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Power, DollarSign, AlertCircle } from "lucide-react";
+import { Power, AlertCircle, Lightbulb } from "lucide-react";
 
 interface POSSessionStartProps {
   employeeNumber?: string;
@@ -135,7 +135,9 @@ export default function POSSessionStart({
 
         {/* Info */}
         <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
-          <p className="font-semibold mb-1">💡 Importante:</p>
+          <p className="flex items-center gap-1.5 font-semibold mb-1">
+            <Lightbulb size={14} /> Importante:
+          </p>
           <p>Cuenta el dinero en la caja y ingresa el monto exacto. Se usará para conciliar al cierre.</p>
         </div>
       </div>

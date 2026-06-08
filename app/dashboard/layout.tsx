@@ -7,6 +7,7 @@ import {
   Home, Users, Settings, UserCog, Gift,
   Monitor, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
+  ShoppingCart, ExternalLink,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -43,7 +44,19 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard" icon={Home} label="Inicio" />
           )}
 
-          {/* POS lives entirely under /pos (terminal flow), not the dashboard */}
+          {/* Quick jump to the POS terminal — opens the separate /pos surface
+              in a new tab (the POS is not embedded in the dashboard). */}
+          <a
+            href="/pos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors no-underline"
+          >
+            <ShoppingCart size={17} className="shrink-0" />
+            Abrir POS
+            <ExternalLink size={13} className="ml-auto text-emerald-400" />
+          </a>
+
           <NavLink href="/dashboard/customers" icon={Users} label="Clientes" />
           <NavLink href="/dashboard/loyalty" icon={Gift} label="Fidelización" />
 

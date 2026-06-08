@@ -3,7 +3,9 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import type { NextRequest as NextType } from 'next/server';
 import { hashPin } from '@/lib/waiter-token';
+import { revalidatePath } from 'next/cache';
 
 // Only OWNER can manage staff
 async function requireOwner() {
@@ -14,10 +16,11 @@ async function requireOwner() {
 
 export async function GET() {
   const session = await requireOwner();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
-  
+
   const staff = await mongoose.connection
     .collection('user')
     .find(
@@ -25,7 +28,7 @@ export async function GET() {
         businessId: session.user.businessId, // String format (from Better Auth)
         _id: { $ne: new mongoose.Types.ObjectId(session.user.id) },
       },
-      { projection: { password: 0 } }
+      { projection: { password: 0 } },
     )
     .sort({ createdAt: -1 })
     .toArray();
@@ -38,12 +41,14 @@ export async function GET() {
       employeeNumber: s.employeeNumber,
       role: s.role ?? 'STAFF',
       createdAt: s.createdAt,
-    }))
+    })),
   );
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextType) {
   const session = await requireOwner();
+  const pathname = req.nextUrl.pathname;
+
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { name, email, password, employeeNumber, role = 'STAFF', pin } = await req.json();
@@ -57,7 +62,7 @@ export async function POST(req: Request) {
   }
   const pinHash = pin ? hashPin(String(pin)) : undefined;
 
-  // ADMIN requires email + password; STAFF only needs employee number
+  // // ADMIN requires email + password; STAFF only needs employee number
   if (role === 'ADMIN' && (!email || !password)) {
     return NextResponse.json({ error: 'Gerente requiere email y contraseña' }, { status: 400 });
   }
@@ -118,6 +123,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Error al crear empleado' }, { status: 400 });
     }
   }
-
+  revalidatePath(pathname)
   return NextResponse.json({ success: true }, { status: 201 });
 }

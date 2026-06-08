@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import POSSession from '@/models/POSSession';
 import Order from '@/models/Order';
+import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import { getBusinessContext, isManager } from '@/lib/pos-auth';
 
@@ -65,9 +66,12 @@ export async function POST(req: Request) {
 
   await posSession.save();
 
+  const business = await Business.findById(ctx.businessId).select('name');
+
   return NextResponse.json({
     success: true,
     cut: {
+      businessName: business?.name,
       sessionId: posSession._id.toString(),
       staffName: posSession.staffName,
       startTime: posSession.startedAt,

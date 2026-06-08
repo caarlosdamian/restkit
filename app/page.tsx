@@ -1,15 +1,22 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import {
   CreditCard, Smartphone, BarChart3, QrCode, Bell, ArrowRight,
   ChevronRight, ShoppingCart, Monitor, Package, FileText,
   Truck, Gift, Check, Zap, Shield, Globe, Users,
-  TrendingUp, Clock, Star, CheckCircle2, Layers,
+  TrendingUp, Clock, Star, CheckCircle2, Layers, Heart,
 } from "lucide-react";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const role = session?.user?.role as string | undefined;
+  // Managers land on the dashboard; staff go straight to the POS terminal.
+  const panelHref = role === "OWNER" || role === "ADMIN" ? "/dashboard" : "/pos";
+
   return (
     <div className="min-h-screen bg-white text-gray-900 antialiased">
-      <Nav />
+      <Nav isAuthenticated={!!session} panelHref={panelHref} />
       <Hero />
       <SocialProof />
       <Modules />
@@ -25,7 +32,7 @@ export default function LandingPage() {
 }
 
 /* ─── NAV ─── */
-function Nav() {
+function Nav({ isAuthenticated, panelHref }: { isAuthenticated: boolean; panelHref: string }) {
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-gray-100">
       <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center gap-8">
@@ -43,12 +50,23 @@ function Nav() {
           <a href="#precios" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors no-underline">Precios</a>
         </nav>
         <div className="flex gap-3 items-center shrink-0">
-          <Link href="/login" className="hidden sm:inline-flex text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2 rounded-xl hover:bg-gray-50 transition-all no-underline">
-            Iniciar sesión
-          </Link>
-          <Link href="/registro" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm no-underline">
-            Prueba gratis
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href={panelHref}
+              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm no-underline"
+            >
+              Ir al panel <ArrowRight size={14} />
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="hidden sm:inline-flex text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2 rounded-xl hover:bg-gray-50 transition-all no-underline">
+                Iniciar sesión
+              </Link>
+              <Link href="/registro" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm no-underline">
+                Prueba gratis
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -171,7 +189,7 @@ function DashboardMockup() {
       {/* Bottom bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-emerald-500 mt-1">
         <span className="text-xs font-semibold text-emerald-100">Próxima factura CFDI lista</span>
-        <span className="text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">Enviar →</span>
+        <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">Enviar <ArrowRight size={11} /></span>
       </div>
     </div>
   );
@@ -669,7 +687,9 @@ function Footer() {
       </div>
       <div className="max-w-[1200px] mx-auto px-6 border-t border-gray-200 py-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-gray-400">© 2026 RestKit. Todos los derechos reservados.</p>
-        <p className="text-xs text-gray-400">Hecho con ♥ en México 🇲🇽</p>
+        <p className="inline-flex items-center gap-1 text-xs text-gray-400">
+          Hecho con <Heart size={11} className="text-rose-400 fill-rose-400" /> en México
+        </p>
       </div>
     </footer>
   );

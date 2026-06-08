@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { analyticsService } from "@/services/analytics.service";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
-import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight } from "lucide-react";
+import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight, Check } from "lucide-react";
 import Link from "next/link";
 import SeedButton from "@/components/dashboard/SeedButton";
 import SeedDataButton from "@/components/dashboard/SeedDataButton";
@@ -127,8 +127,9 @@ export default async function DashboardPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-gray-800 truncate">{v.customerName}</p>
-                    <p className="text-[0.65rem] text-gray-400">
-                      {v.type === "REWARD_REDEMPTION" ? "🎁 Premio canjeado" : "✓ Visita"}
+                    <p className="flex items-center gap-1 text-[0.65rem] text-gray-400">
+                      {v.type === "REWARD_REDEMPTION" ? <Gift size={11} /> : <Check size={11} />}
+                      {v.type === "REWARD_REDEMPTION" ? "Premio canjeado" : "Visita"}
                       {" · "}
                       {v.timeAgo}
                     </p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogIn, AlertCircle, UtensilsCrossed, Mail, Lock } from "lucide-react";
+import { LogIn, AlertCircle, UtensilsCrossed, Mail, Lock, ClipboardList } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
 export default function POSLoginPage() {
@@ -12,15 +12,14 @@ export default function POSLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // If the terminal already has a valid Better Auth session, go straight in.
+  // The POS is its own section. Entry depends on the POS login marker
+  // (`posEmployeeSession`), NOT the dashboard's Better Auth cookie — so being
+  // logged into /dashboard does not auto-enter the POS, and there is no
+  // redirect loop with /pos/dashboard (which gates on the same marker).
   useEffect(() => {
-    let active = true;
-    authClient.getSession().then(({ data }) => {
-      if (active && data?.session) router.push("/pos/dashboard");
-    });
-    return () => {
-      active = false;
-    };
+    if (window.localStorage.getItem("posEmployeeSession")) {
+      router.replace("/pos/dashboard");
+    }
   }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -139,7 +138,9 @@ export default function POSLoginPage() {
 
           {/* Info */}
           <div className="space-y-3 rounded-xl bg-amber-50 border border-amber-200 p-4">
-            <p className="text-sm font-semibold text-amber-900">📋 Cómo funciona:</p>
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-900">
+              <ClipboardList size={15} /> Cómo funciona:
+            </p>
             <ul className="text-xs text-amber-800 space-y-1.5">
               <li className="flex gap-2">
                 <span className="shrink-0">1.</span>

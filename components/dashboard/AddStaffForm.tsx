@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserPlus, X } from "lucide-react";
+import { UserPlus, X, Check, CheckCircle2 } from "lucide-react";
 
 export default function AddStaffForm() {
   const [open, setOpen] = useState(false);
@@ -11,6 +11,7 @@ export default function AddStaffForm() {
   const [success, setSuccess] = useState("");
   const [role, setRole] = useState("STAFF");
   const router = useRouter();
+  const form = useRef<HTMLFormElement>(null)
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -49,10 +50,12 @@ export default function AddStaffForm() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al crear empleado");
-      setSuccess(`✓ ${name} fue agregado exitosamente`);
+      setSuccess(`${name} fue agregado exitosamente`);
       setError("");
       // Reset form and reload page after brief delay
-      e.currentTarget.reset();
+
+      
+      (form.current as HTMLFormElement).reset()
       setTimeout(() => window.location.reload(), 600);
     } catch (err: any) {
       setError(err.message);
@@ -86,7 +89,7 @@ export default function AddStaffForm() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" ref={form}>
           {/* Role selector */}
           <div>
             <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
@@ -188,19 +191,20 @@ export default function AddStaffForm() {
           <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900">
             {role === "STAFF" ? (
               <>
-                <p className="font-semibold">✓ Mesero</p>
+                <p className="flex items-center gap-1 font-semibold"><Check size={13} /> Mesero</p>
                 <p className="mt-1">Solo necesita número de empleado para iniciar sesión en las mesas.</p>
               </>
             ) : (
               <>
-                <p className="font-semibold">✓ Gerente</p>
+                <p className="flex items-center gap-1 font-semibold"><Check size={13} /> Gerente</p>
                 <p className="mt-1">Necesita email y contraseña para acceder a configuración.</p>
               </>
             )}
           </div>
 
           {success && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm text-emerald-600">
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm text-emerald-600">
+              <CheckCircle2 size={15} className="shrink-0" />
               {success}
             </div>
           )}

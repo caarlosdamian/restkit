@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Clock, Users } from "lucide-react";
+import { LogOut, Clock, Users, Power, User } from "lucide-react";
 import POSSessionStart from "@/components/pos/POSSessionStart";
+import POSSessionClose from "@/components/pos/POSSessionClose";
 import Link from "next/link";
-import { authClient } from "@/lib/auth-client";
 
 // Display-only snapshot cached after the terminal logs in. Never used for
 // authorization — the server derives identity from the session cookie.
@@ -47,6 +47,14 @@ export default function POSDashboard() {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<TableFilter>("all");
+  const [showClose, setShowClose] = useState(false);
+
+  const isManager = session?.role === "OWNER" || session?.role === "ADMIN";
+
+  function handleSessionClosed() {
+    setShowClose(false);
+    setPOSSession(null); // caja closed → managers see "Abrir caja" again
+  }
 
   // Mark/free a table manually (only meaningful when it has no active order).
   async function toggleBusy(table: Table) {
@@ -108,9 +116,10 @@ export default function POSDashboard() {
     }
   }
 
-  async function handleLogout() {
+  function handleLogout() {
+    // End only the POS section. Leave the dashboard's Better Auth session
+    // intact — the two sections are independent and must not interfere.
     localStorage.removeItem("posEmployeeSession");
-    await authClient.signOut();
     router.push("/pos");
   }
 
@@ -181,6 +190,11 @@ export default function POSDashboard() {
     );
   }
 
+  // Cash register close (corte de caja) flow
+  if (showClose && posSession) {
+    return <POSSessionClose session={posSession} onSessionClosed={handleSessionClosed} />;
+  }
+
   // Show POS grid if session is open
   const occupied = tables.filter(isBusy).length;
   const visibleTables = tables.filter((t) =>
@@ -199,20 +213,32 @@ export default function POSDashboard() {
       <div className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-500">
-              👤 {session.employeeName}
+            <p className="flex items-center gap-1.5 text-sm text-gray-500">
+              <User size={14} />
+              {session.employeeName}
               {session.employeeNumber ? ` #${session.employeeNumber}` : ""}
             </p>
             <h1 className="text-2xl font-extrabold text-gray-900 mt-1">POS — Mesas</h1>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <LogOut size={16} />
-            Salir
-          </button>
+          <div className="flex items-center gap-2">
+            {isManager && posSession && (
+              <button
+                onClick={() => setShowClose(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-100 transition-colors"
+              >
+                <Power size={16} />
+                Cerrar caja
+              </button>
+            )}
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <LogOut size={16} />
+              Salir
+            </button>
+          </div>
         </div>
       </div>
 

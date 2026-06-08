@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Power, AlertCircle, CheckCircle2, TrendingUp } from "lucide-react";
+import {
+  Power, AlertCircle, CheckCircle2, TrendingUp,
+  Banknote, CreditCard, ArrowLeftRight, Printer,
+} from "lucide-react";
+import { printCashCut } from "@/lib/cash-cut-html";
 
 interface SessionData {
   id: string;
@@ -116,8 +120,9 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
-                  {!hasVariance ? "✓ Cuadre perfecto" : isOverage ? "Faltante" : "Sobrante"}
+                <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
+                  {!hasVariance && <CheckCircle2 size={13} className="text-emerald-600" />}
+                  {!hasVariance ? "Cuadre perfecto" : isOverage ? "Faltante" : "Sobrante"}
                 </p>
                 <p
                   className={`text-3xl font-extrabold ${
@@ -143,15 +148,21 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
             <p className="text-sm font-bold text-gray-900">Ventas del día</p>
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs text-blue-600 font-semibold mb-1">💵 Efectivo</p>
+                <p className="flex items-center gap-1 text-xs text-blue-600 font-semibold mb-1">
+                  <Banknote size={13} /> Efectivo
+                </p>
                 <p className="text-lg font-bold text-blue-900">${cut.cashSales.toFixed(2)}</p>
               </div>
               <div className="rounded-lg bg-purple-50 p-3">
-                <p className="text-xs text-purple-600 font-semibold mb-1">💳 Tarjeta</p>
+                <p className="flex items-center gap-1 text-xs text-purple-600 font-semibold mb-1">
+                  <CreditCard size={13} /> Tarjeta
+                </p>
                 <p className="text-lg font-bold text-purple-900">${cut.cardSales.toFixed(2)}</p>
               </div>
               <div className="rounded-lg bg-indigo-50 p-3">
-                <p className="text-xs text-indigo-600 font-semibold mb-1">🔄 Transferencia</p>
+                <p className="flex items-center gap-1 text-xs text-indigo-600 font-semibold mb-1">
+                  <ArrowLeftRight size={13} /> Transferencia
+                </p>
                 <p className="text-lg font-bold text-indigo-900">${cut.transferSales.toFixed(2)}</p>
               </div>
             </div>
@@ -186,13 +197,21 @@ export default function POSSessionClose({ session, onSessionClosed }: POSSession
             </div>
           </div>
 
-          {/* Done button */}
-          <button
-            onClick={onSessionClosed}
-            className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold transition-colors"
-          >
-            Listo
-          </button>
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => printCashCut(cut)}
+              className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold transition-colors"
+            >
+              <Printer size={16} /> Imprimir corte
+            </button>
+            <button
+              onClick={onSessionClosed}
+              className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold transition-colors"
+            >
+              Listo
+            </button>
+          </div>
         </div>
       </div>
     );

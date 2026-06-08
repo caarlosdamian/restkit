@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sprout, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Sprout, AlertCircle, CheckCircle2, Smartphone } from "lucide-react";
 
 interface SeedDataButtonProps {
   restaurantCode: string;
@@ -63,8 +63,8 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
     <div className="space-y-4">
       {/* Restaurant Code Display */}
       <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">
-          📱 Código de Restaurante (para POS)
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">
+          <Smartphone size={13} /> Código de Restaurante (para POS)
         </p>
         <div className="flex items-center gap-3">
           <code className="flex-1 px-3 py-2 rounded-lg bg-white border border-blue-200 font-mono font-bold text-blue-900 text-sm">
@@ -96,7 +96,7 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
           <div className="flex items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 p-3 space-y-2">
             <CheckCircle2 size={16} className="text-emerald-600 mt-0.5 shrink-0 flex-shrink-0" />
             <div className="text-sm text-emerald-700">
-              <p className="font-semibold mb-1">✓ Datos creados exitosamente</p>
+              <p className="font-semibold mb-1">Datos creados exitosamente</p>
               <ul className="text-xs space-y-0.5 ml-0">
                 <li>• {seedData.staff} empleados (números: {seedData.employeeNumbers.join(", ")})</li>
                 <li>• {seedData.tables} mesas</li>

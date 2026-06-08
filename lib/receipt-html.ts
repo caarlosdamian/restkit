@@ -1,5 +1,7 @@
+import { printHtml } from './print';
+
 export interface ReceiptData {
-  ticketNumber: string;
+  ticketNumber?: string;
   businessName: string;
   fiscalName?: string;
   rfc?: string;
@@ -12,10 +14,13 @@ export interface ReceiptData {
   staffName: string;
   items: Array<{ name: string; quantity: number; price: number }>;
   total: number;
-  paymentMethod: string;
+  paymentMethod?: string;
   amountReceived?: number;
   change?: number;
   closedAt: Date;
+  /** Pre-bill ("cuenta") to hand to the customer before paying — no ticket
+   *  number, no payment section, and marked as not a proof of payment. */
+  preliminary?: boolean;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -47,8 +52,10 @@ export function generateReceiptHtml(data: ReceiptData): string {
   const date = new Date(data.closedAt);
   const dateStr = date.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const timeStr = date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-  const payLabel = PAYMENT_LABELS[data.paymentMethod] ?? data.paymentMethod;
-  const footer = data.footerMessage || '¡Gracias por su visita!';
+  const payLabel = data.paymentMethod ? (PAYMENT_LABELS[data.paymentMethod] ?? data.paymentMethod) : '';
+  const footer = data.preliminary
+    ? 'CUENTA — no es comprobante de pago'
+    : data.footerMessage || '¡Gracias por su visita!';
 
   const lines: string[] = [''];
 
@@ -68,7 +75,8 @@ export function generateReceiptHtml(data: ReceiptData): string {
 
   // ── Order info ──
   lines.push(row(`Mesa: ${data.tableName}`, `${dateStr} ${timeStr}`));
-  lines.push(row(`Ticket: #${data.ticketNumber}`, data.staffName ? `Atendió: ${data.staffName.split(' ')[0]}` : ''));
+  const leftLabel = data.preliminary ? 'CUENTA' : `Ticket: #${data.ticketNumber}`;
+  lines.push(row(leftLabel, data.staffName ? `Atendió: ${data.staffName.split(' ')[0]}` : ''));
   lines.push(DIV);
 
   // ── Items ──
@@ -87,16 +95,18 @@ export function generateReceiptHtml(data: ReceiptData): string {
   lines.push(row('TOTAL:', `$${data.total.toFixed(2)}`));
   lines.push(DIV);
 
-  // ── Payment ──
-  lines.push(row('Forma de pago:', payLabel));
-  if (data.paymentMethod === 'CASH' && data.amountReceived != null) {
-    lines.push(row('Recibido:', `$${data.amountReceived.toFixed(2)}`));
-    lines.push(row('Cambio:', `$${(data.change ?? 0).toFixed(2)}`));
+  // ── Payment (skipped for a pre-bill) ──
+  if (!data.preliminary) {
+    lines.push(row('Forma de pago:', payLabel));
+    if (data.paymentMethod === 'CASH' && data.amountReceived != null) {
+      lines.push(row('Recibido:', `$${data.amountReceived.toFixed(2)}`));
+      lines.push(row('Cambio:', `$${(data.change ?? 0).toFixed(2)}`));
+    }
+    lines.push(DIV);
   }
-  lines.push(DIV);
   lines.push('');
   lines.push(center(footer));
-  lines.push(center('Comprobante no fiscal'));
+  if (!data.preliminary) lines.push(center('Comprobante no fiscal'));
   lines.push('');
 
   const body = lines
@@ -107,7 +117,7 @@ export function generateReceiptHtml(data: ReceiptData): string {
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Ticket #${data.ticketNumber}</title>
+  <title>${data.preliminary ? 'Cuenta' : `Ticket #${data.ticketNumber ?? ''}`}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -133,11 +143,5 @@ ${body}
 }
 
 export function printReceipt(data: ReceiptData): void {
-  const html = generateReceiptHtml(data);
-  const win = window.open('', '_blank', 'width=340,height=640,scrollbars=yes');
-  if (!win) return;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.onload = () => { win.focus(); win.print(); };
+  printHtml(generateReceiptHtml(data));
 }

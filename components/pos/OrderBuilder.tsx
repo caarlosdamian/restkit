@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer } from "lucide-react";
 import PaymentModal from "./PaymentModal";
 import { waiterHeader, refreshWaiterFromResponse } from "@/lib/waiter-session";
+import { printReceipt } from "@/lib/receipt-html";
 
 interface Product {
   _id: string;
@@ -224,6 +225,27 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
     } finally {
       setSaving(false);
     }
+  }
+
+  // Print the pre-bill ("cuenta") to bring to the customer before paying.
+  function printPreBill() {
+    if (items.length === 0) return;
+    printReceipt({
+      preliminary: true,
+      businessName,
+      fiscalName: ticketConfig.fiscalName,
+      rfc: ticketConfig.rfc,
+      phone: ticketConfig.phone,
+      address: ticketConfig.address,
+      fiscalAddress: ticketConfig.fiscalAddress,
+      website: ticketConfig.website,
+      footerMessage: ticketConfig.footerMessage,
+      tableName,
+      staffName,
+      items: items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      total,
+      closedAt: new Date(),
+    });
   }
 
   const st = STATUS_LABELS[status];
@@ -479,9 +501,18 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                     disabled={saving}
                     className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
                   >
-                    ✓ Marcar como lista
+                    <Check size={16} /> Marcar como lista
                   </button>
                 )}
+
+                {/* Print pre-bill (cuenta) — to bring to the customer before paying */}
+                <button
+                  onClick={printPreBill}
+                  disabled={items.length === 0}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 py-3 text-sm font-semibold disabled:opacity-40 transition-colors"
+                >
+                  <Printer size={16} /> Imprimir cuenta
+                </button>
 
                 {/* Collect payment */}
                 <button
