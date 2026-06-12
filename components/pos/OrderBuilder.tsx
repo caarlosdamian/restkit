@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer, StickyNote, X } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer, StickyNote, X, Keyboard } from "lucide-react";
 import PaymentModal from "./PaymentModal";
+import OnScreenKeyboard from "./OnScreenKeyboard";
 import { waiterHeader, refreshWaiterFromResponse } from "@/lib/waiter-session";
 import { printReceipt } from "@/lib/receipt-html";
 
@@ -32,6 +33,7 @@ interface TicketConfig {
   fiscalAddress?: string;
   website?: string;
   footerMessage?: string;
+  iva?: number;
 }
 
 interface OrderBuilderProps {
@@ -69,6 +71,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   // Per-item special note editor (allergies, "sin leche de vaca", etc.)
   const [noteEditing, setNoteEditing] = useState<{ productId: string; name: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [showKeyboard, setShowKeyboard] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const NOTE_PRESETS = [
@@ -268,6 +271,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       fiscalAddress: ticketConfig.fiscalAddress,
       website: ticketConfig.website,
       footerMessage: ticketConfig.footerMessage,
+      iva: ticketConfig.iva,
       tableName,
       staffName,
       items: items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, notes: i.notes })),
@@ -289,7 +293,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] p-3 sm:p-5">
+    <div className="flex flex-col h-dvh p-3 sm:p-5">
       {/* Header */}
       <div className="flex items-center gap-4 mb-4">
         <button
@@ -475,7 +479,7 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                       {item.notes && (
                         <p className="flex items-start gap-1 text-[0.7rem] text-amber-700 mt-0.5">
                           <StickyNote size={11} className="mt-0.5 shrink-0" />
-                          <span className="break-words">{item.notes}</span>
+                          <span className="wrap-break-word">{item.notes}</span>
                         </p>
                       )}
                     </div>
@@ -619,7 +623,11 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       {/* Per-item note editor */}
       {noteEditing && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4">
+          <div
+            className={`w-full rounded-2xl bg-white shadow-2xl p-6 space-y-4 ${
+              showKeyboard ? "max-w-xl" : "max-w-md"
+            }`}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-lg font-extrabold text-gray-900">Nota del producto</p>
@@ -641,6 +649,18 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
               placeholder="Ej. Sin leche de vaca, alergia a nueces…"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-base text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
             />
+
+            {/* On-screen keyboard toggle — for devices without a native keyboard */}
+            <button
+              type="button"
+              onClick={() => setShowKeyboard((s) => !s)}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900"
+            >
+              <Keyboard size={16} />
+              {showKeyboard ? "Ocultar teclado" : "Mostrar teclado en pantalla"}
+            </button>
+
+            {showKeyboard && <OnScreenKeyboard value={noteDraft} onChange={setNoteDraft} />}
 
             {/* Quick presets */}
             <div className="flex flex-wrap gap-2">

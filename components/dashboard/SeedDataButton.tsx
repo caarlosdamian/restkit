@@ -62,7 +62,7 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
   return (
     <div className="space-y-4">
       {/* Restaurant Code Display */}
-      <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
+      {/* <div className="rounded-xl bg-blue-50 border border-blue-200 p-4">
         <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-blue-600 mb-2">
           <Smartphone size={13} /> Código de Restaurante (para POS)
         </p>
@@ -83,7 +83,7 @@ export default function SeedDataButton({ restaurantCode }: SeedDataButtonProps) 
         <p className="text-xs text-blue-700 mt-2">
           Comparte este código con tus empleados para acceder al sistema POS
         </p>
-      </div>
+      </div> */}
 
       {/* Seed Data Button */}
       <div className="rounded-xl border border-gray-200 p-4 space-y-3">

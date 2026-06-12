@@ -16,6 +16,7 @@ interface BusinessData {
     fiscalAddress?: string;
     website?: string;
     footerMessage?: string;
+    iva?: number;
   };
 }
 
@@ -62,6 +63,7 @@ export default function SettingsForm({ initial }: { initial: BusinessData }) {
       fiscalAddress: data.ticket.fiscalAddress,
       website: data.ticket.website,
       footerMessage: data.ticket.footerMessage,
+      iva: data.ticket.iva,
       tableName: "Mesa 1",
       staffName: "Demo",
       items: [
@@ -183,6 +185,20 @@ export default function SettingsForm({ initial }: { initial: BusinessData }) {
             value={data.ticket.footerMessage ?? ""}
             onChange={(e) => setField("ticket.footerMessage", e.target.value)}
             placeholder="¡Gracias por su visita!"
+            className={inputCls}
+          />
+        </Field>
+        <Field
+          label="IVA (%)"
+          hint="Los precios ya incluyen IVA; se muestra desglosado en el ticket. Usa 0 para ocultarlo."
+        >
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={data.ticket.iva ?? 16}
+            onChange={(e) => setField("ticket.iva", e.target.value === "" ? 0 : parseFloat(e.target.value))}
             className={inputCls}
           />
         </Field>

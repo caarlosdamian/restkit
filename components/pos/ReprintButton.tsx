@@ -11,6 +11,7 @@ interface TicketConfig {
   fiscalAddress?: string;
   website?: string;
   footerMessage?: string;
+  iva?: number;
 }
 
 interface ReprintButtonProps {

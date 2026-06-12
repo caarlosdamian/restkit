@@ -10,6 +10,8 @@ export interface ReceiptData {
   fiscalAddress?: string;
   website?: string;
   footerMessage?: string;
+  /** IVA rate % (prices already include it). Shown broken out. 0/undefined hides it. */
+  iva?: number;
   tableName: string;
   staffName: string;
   items: Array<{ name: string; quantity: number; price: number; notes?: string }>;
@@ -117,6 +119,17 @@ export function generateReceiptHtml(data: ReceiptData): string {
   lines.push(DASH);
   lines.push(row('TOTAL:', `$${data.total.toFixed(2)}`));
   lines.push(DIV);
+
+  // ── IVA breakdown (prices already include IVA) ──
+  const ivaRate = data.iva ?? 16;
+  if (ivaRate > 0) {
+    const subtotal = data.total / (1 + ivaRate / 100);
+    const ivaAmount = data.total - subtotal;
+    lines.push(row('Subtotal:', `$${subtotal.toFixed(2)}`));
+    lines.push(row(`IVA ${ivaRate}%:`, `$${ivaAmount.toFixed(2)}`));
+    lines.push(center('IVA incluido en el precio'));
+    lines.push(DIV);
+  }
 
   // ── Payment (skipped for a pre-bill) ──
   if (!data.preliminary) {

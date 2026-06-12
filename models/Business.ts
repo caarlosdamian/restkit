@@ -8,6 +8,7 @@ export interface ITicketConfig {
   fiscalAddress?: string;
   website?: string;
   footerMessage?: string;
+  iva?: number;          // IVA rate %, prices already include it. 0 disables.
 }
 
 export interface IBusiness extends Document {
@@ -46,6 +47,7 @@ const BusinessSchema: Schema = new Schema(
       fiscalAddress: { type: String },
       website:       { type: String },
       footerMessage: { type: String, default: '¡Gracias por su visita!' },
+      iva:           { type: Number, default: 16 },
     },
   },
   { timestamps: true }
