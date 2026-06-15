@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import OrderBuilder from '@/components/pos/OrderBuilder';
 import WaiterPinModal from '@/components/pos/WaiterPinModal';
-import { getActiveWaiter } from '@/lib/waiter-session';
+import { clearActiveWaiter } from '@/lib/waiter-session';
 
 interface EmployeeSession {
   employeeId: string;
@@ -26,7 +26,7 @@ interface Product {
 interface Order {
   _id: string;
   status: string;
-  items: any[];
+  items: Array<{ productId: string; name: string; price: number; quantity: number; notes?: string }>;
   total: number;
 }
 
@@ -118,9 +118,10 @@ export default function POSOrderPage({
       const employeeSession = JSON.parse(stored) as EmployeeSession;
       setSession(employeeSession);
 
-      // If a waiter is already active (within the 90s window), skip the PIN.
-      const active = getActiveWaiter();
-      if (active) setWaiter({ staffName: active.staffName });
+      // Require a fresh PIN every time a table is opened, so each order is
+      // attributed to whoever is actually taking it. Any previous waiter is
+      // cleared on entry (and again on leave, below).
+      clearActiveWaiter();
 
       // Get table ID from params
       const p = await params;
@@ -129,6 +130,8 @@ export default function POSOrderPage({
       // Fetch data
       await fetchData(p.tableId, employeeSession);
     })();
+
+    return () => clearActiveWaiter();
   }, [params, router]);
 
   if (loading || !tableId || !session) {

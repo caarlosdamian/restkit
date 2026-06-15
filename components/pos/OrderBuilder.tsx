@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer, StickyNote, X, Keyboard } from "lucide-react";
+import { Plus, Minus, Trash2, ChefHat, CreditCard, ArrowLeft, Search, Check, Printer, StickyNote, X, Keyboard, ArrowRightLeft } from "lucide-react";
 import PaymentModal from "./PaymentModal";
 import OnScreenKeyboard from "./OnScreenKeyboard";
 import { waiterHeader, refreshWaiterFromResponse } from "@/lib/waiter-session";
@@ -57,8 +57,11 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   READY:      { label: "Lista para cobrar", color: "bg-emerald-50 text-emerald-700 border-emerald-200" },
 };
 
-export default function OrderBuilder({ tableId, tableName, businessName, staffName, ticketConfig = {}, products, initialOrder }: OrderBuilderProps) {
+export default function OrderBuilder({ tableId: initialTableId, tableName: initialTableName, businessName, staffName, ticketConfig = {}, products, initialOrder }: OrderBuilderProps) {
   const router = useRouter();
+  // Table can change if the order is moved to another table mid-service.
+  const [tableId, setTableId] = useState(initialTableId);
+  const [tableName, setTableName] = useState(initialTableName);
   const [sessionValid, setSessionValid] = useState(true);
   const [orderId, setOrderId]   = useState(initialOrder?._id ?? null);
   const [status, setStatus]     = useState(initialOrder?.status ?? "OPEN");
@@ -72,6 +75,10 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
   const [noteEditing, setNoteEditing] = useState<{ productId: string; name: string } | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [showKeyboard, setShowKeyboard] = useState(false);
+  // Move-to-another-table flow
+  const [showMove, setShowMove] = useState(false);
+  const [moveTables, setMoveTables] = useState<{ _id: string; number: number; name?: string }[]>([]);
+  const [moving, setMoving] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const NOTE_PRESETS = [
@@ -202,6 +209,43 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
       return next;
     });
     setNoteEditing(null);
+  }
+
+  // ── Move order to another table ──
+  async function openMove() {
+    setShowMove(true);
+    const res = await fetch("/api/waiter/available-tables", { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      // Only tables that are free (no active order) and not the current one.
+      setMoveTables(
+        (data.tables ?? []).filter(
+          (t: { _id: string; activeOrder?: unknown }) => !t.activeOrder && t._id !== tableId
+        )
+      );
+    }
+  }
+
+  async function moveToTable(target: { _id: string; number: number; name?: string }) {
+    if (!orderId || moving) return;
+    setMoving(true);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/move`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableId: target._id }),
+      });
+      if (res.ok) {
+        setTableId(target._id);
+        setTableName(target.name || `Mesa ${target.number}`);
+        setShowMove(false);
+        // Keep the URL in sync (so a reload loads the new table) without
+        // remounting the page — avoids a spurious PIN prompt mid-service.
+        window.history.replaceState(null, "", `/pos/order/${target._id}`);
+      }
+    } finally {
+      setMoving(false);
+    }
   }
 
   // Send to kitchen (works from any active status)
@@ -575,6 +619,17 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
                   <CreditCard size={16} /> Cobrar ${total.toFixed(2)}
                 </button>
 
+                {/* Move order to another table */}
+                {orderId && (
+                  <button
+                    onClick={openMove}
+                    disabled={saving}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 py-3.5 text-base font-semibold disabled:opacity-40 active:scale-[0.98] transition-all"
+                  >
+                    <ArrowRightLeft size={16} /> Cambiar de mesa
+                  </button>
+                )}
+
                 <button
                   onClick={() => changeStatus("CANCELLED")}
                   disabled={saving}
@@ -617,6 +672,44 @@ export default function OrderBuilder({ tableId, tableName, businessName, staffNa
               <CreditCard size={16} /> Ir a cobrar
             </button>
           )}
+        </div>
+      )}
+
+      {/* Move to another table */}
+      {showMove && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-6 space-y-4 max-h-[85dvh] flex flex-col">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-lg font-extrabold text-gray-900">Cambiar de mesa</p>
+                <p className="text-sm text-gray-500">Mover la orden de {tableName} a otra mesa libre</p>
+              </div>
+              <button
+                onClick={() => setShowMove(false)}
+                className="p-2 -mr-2 text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {moveTables.length === 0 ? (
+              <p className="py-10 text-center text-sm text-gray-400">No hay mesas libres disponibles.</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2.5 overflow-y-auto">
+                {moveTables.map((t) => (
+                  <button
+                    key={t._id}
+                    onClick={() => moveToTable(t)}
+                    disabled={moving}
+                    className="flex flex-col items-center justify-center gap-1 py-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-400 active:scale-95 disabled:opacity-40 transition-all"
+                  >
+                    <span className="text-[0.6rem] font-bold uppercase tracking-wider text-emerald-500">Mesa</span>
+                    <span className="text-2xl font-extrabold">{t.number}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
