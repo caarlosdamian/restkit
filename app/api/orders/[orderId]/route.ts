@@ -43,13 +43,21 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   const actingStaffId = new mongoose.Types.ObjectId(waiter?.staffId ?? ctx.userId);
 
   if (body.items !== undefined) {
-    // Preserve who first added each existing line; stamp new lines with the
-    // acting waiter so attribution survives a full items replace.
-    const prevById = new Map(order.items.map((i) => [String(i.productId), i.addedBy]));
-    order.items = body.items.map((i: IOrderItem) => ({
-      ...i,
-      addedBy: prevById.get(String(i.productId)) ?? actingStaffId,
-    }));
+    // Preserve who first added each existing line, and how much the kitchen has
+    // already prepared, so attribution + KDS progress survive a full items
+    // replace. preparedQty is capped at the (possibly reduced) new quantity;
+    // extra units added in a later round re-appear as pending on the KDS.
+    const prevById = new Map(
+      order.items.map((i) => [String(i.productId), { addedBy: i.addedBy, preparedQty: i.preparedQty ?? 0 }])
+    );
+    order.items = body.items.map((i: IOrderItem) => {
+      const prev = prevById.get(String(i.productId));
+      return {
+        ...i,
+        addedBy: prev?.addedBy ?? actingStaffId,
+        preparedQty: Math.min(prev?.preparedQty ?? 0, i.quantity),
+      };
+    });
     order.total = body.items.reduce(
       (sum: number, i: IOrderItem) => sum + i.price * i.quantity,
       0
@@ -58,6 +66,10 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
 
   if (body.status) {
     order.status = body.status;
+    // First time the ticket reaches the kitchen → stamp the aging clock.
+    if (body.status === 'IN_KITCHEN' && !order.kitchenAt) {
+      order.kitchenAt = new Date();
+    }
     if (body.status === 'PAID') {
       // Generate a short ticket number from the ObjectId
       order.ticketNumber = order._id.toString().slice(-6).toUpperCase();

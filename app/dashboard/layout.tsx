@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
 import {
   Home, Users, Settings, UserCog, Gift,
-  Monitor, Package, ClipboardList,
+  ChefHat, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
   ShoppingCart, ExternalLink,
 } from "lucide-react";
@@ -57,6 +57,18 @@ export default async function DashboardLayout({
             <ExternalLink size={13} className="ml-auto text-emerald-400" />
           </a>
 
+          {/* Kitchen display — also a /pos surface, opens in its own tab. */}
+          <a
+            href="/pos/kitchen"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors no-underline"
+          >
+            <ChefHat size={17} className="shrink-0" />
+            Cocina (KDS)
+            <ExternalLink size={13} className="ml-auto text-amber-400" />
+          </a>
+
           <NavLink href="/dashboard/customers" icon={Users} label="Clientes" />
           <NavLink href="/dashboard/loyalty" icon={Gift} label="Fidelización" />
 
@@ -81,7 +93,6 @@ export default async function DashboardLayout({
             <p className="text-[0.65rem] font-bold uppercase tracking-wider text-gray-300">Próximamente</p>
           </div>
           {[
-            { icon: Monitor, label: "Cocina (KDS)" },
             { icon: Package, label: "Inventario" },
             { icon: FileText, label: "Facturación" },
             { icon: Truck, label: "Delivery" },

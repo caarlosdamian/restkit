@@ -255,10 +255,12 @@ export default function OrderBuilder({ tableId: initialTableId, tableName: initi
     try {
       let oid = orderId;
       if (!oid) {
+        // Create the order already IN_KITCHEN so it lands on the kitchen
+        // display immediately (a fresh table goes straight to cooking).
         const res = await fetch("/api/orders", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...waiterHeader() },
-          body: JSON.stringify({ tableId, items }),
+          body: JSON.stringify({ tableId, items, status: "IN_KITCHEN" }),
         });
         refreshWaiterFromResponse(res);
         const data = await res.json();

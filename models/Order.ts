@@ -10,6 +10,8 @@ export interface IOrderItem {
   notes?: string;
   /** Waiter who first added this line (Fase 2 attribution). */
   addedBy?: mongoose.Types.ObjectId;
+  /** Units the kitchen has marked prepared on the KDS (0..quantity). */
+  preparedQty?: number;
 }
 
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
@@ -28,6 +30,8 @@ export interface IOrder extends Document {
   change?: number;
   ticketNumber?: string;
   closedAt?: Date;
+  /** When the ticket first entered the kitchen — drives KDS FIFO + aging timer. */
+  kitchenAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +44,7 @@ const OrderItemSchema = new Schema<IOrderItem>(
     quantity: { type: Number, required: true, min: 1 },
     notes: { type: String },
     addedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    preparedQty: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
@@ -63,6 +68,7 @@ const OrderSchema = new Schema<IOrder>(
     change: { type: Number },
     ticketNumber: { type: String },
     closedAt: { type: Date },
+    kitchenAt: { type: Date },
   },
   { timestamps: true }
 );

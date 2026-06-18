@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
-  const { tableId, items } = await req.json();
+  const { tableId, items, status } = await req.json();
 
   if (!tableId) return NextResponse.json({ error: 'tableId requerido' }, { status: 400 });
 
@@ -60,13 +60,19 @@ export async function POST(req: Request) {
   const incoming: Array<{ price: number; quantity: number }> = items ?? [];
   const total = incoming.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+  // A new order may be created straight into the kitchen (waiter taps "Enviar a
+  // cocina" on a fresh table). Stamp kitchenAt so the KDS can order/age it.
+  const goesToKitchen = status === 'IN_KITCHEN';
+
   const order = await Order.create({
     tableId: new mongoose.Types.ObjectId(tableId),
     tableName: table.name || `Mesa ${table.number}`,
     businessId: ctx.businessId,
     staffId: actingStaffId,
+    status: goesToKitchen ? 'IN_KITCHEN' : 'OPEN',
     items: (items ?? []).map((i: Record<string, unknown>) => ({ ...i, addedBy: actingStaffId })),
     total,
+    ...(goesToKitchen ? { kitchenAt: new Date() } : {}),
   });
 
   return jsonWithRefreshedToken(order, waiter, ctx.businessIdStr, 201);
