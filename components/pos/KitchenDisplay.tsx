@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChefHat, Check, ArrowLeft, AlarmClock } from "lucide-react";
+import { generateKitchenTicketHtml } from "@/lib/kitchen-ticket";
 
 interface KitchenItem {
   productId: string;
@@ -35,6 +36,28 @@ function formatElapsed(s: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+// "Print" a comanda from the kitchen screen. Runs in the background — no print
+// dialog yet (the thermal printer isn't configured). For now we generate the
+// 80mm ticket HTML and log it so we can confirm the trigger fires; swap the
+// console.log for a real print/queue call once the printer is set up.
+function printComanda(
+  ticket: Ticket,
+  items: Array<{ name: string; quantity: number; notes?: string }>,
+  round: number
+): void {
+  const html = generateKitchenTicketHtml({
+    tableName: ticket.tableName,
+    sentAt: new Date(),
+    items,
+    round,
+    orderNotes: ticket.notes ?? undefined,
+  });
+  console.log(
+    `[KDS] 🖨️ Comanda — ${ticket.tableName} (ronda ${round})`,
+    { items, htmlLength: html.length }
+  );
+}
+
 export default function KitchenDisplay() {
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -42,6 +65,14 @@ export default function KitchenDisplay() {
   const [now, setNow] = useState(() => Date.now());
   // Lines being bumped — keeps the tap responsive before the next poll.
   const bumping = useRef<Set<string>>(new Set());
+  // What we've already sent to the printer, per ticket: the round count and the
+  // per-product quantities printed so far. Lets us print only NEW items when a
+  // waiter adds a second round to an existing ticket.
+  const printed = useRef<Map<string, { round: number; qtys: Record<string, number> }>>(new Map());
+  // Skip the very first feed so we don't reprint the backlog already in the
+  // kitchen when this screen opens — only comandas that arrive while it's
+  // running get printed.
+  const seeded = useRef(false);
 
   const load = useCallback(async () => {
     try {
@@ -52,12 +83,51 @@ export default function KitchenDisplay() {
       }
       if (res.ok) {
         const data = await res.json();
-        setTickets(data.tickets ?? []);
+        const list: Ticket[] = data.tickets ?? [];
+        setTickets(list);
+        detectAndPrint(list);
       }
     } finally {
       setLoading(false);
     }
   }, [router]);
+
+  // Compare the incoming feed against what we've already printed and fire a
+  // comanda for any new ticket or newly-added items (a later round).
+  function detectAndPrint(list: Ticket[]) {
+    const store = printed.current;
+    const firstRun = !seeded.current;
+
+    for (const t of list) {
+      const prev = store.get(t._id);
+      const prevQtys = prev?.qtys ?? {};
+      const delta = t.items
+        .map((i) => ({
+          name: i.name,
+          quantity: i.quantity - (prevQtys[i.productId] ?? 0),
+          notes: i.notes ?? undefined,
+        }))
+        .filter((i) => i.quantity > 0);
+
+      if (delta.length === 0) continue;
+
+      const round = (prev?.round ?? 0) + 1;
+      // On the first feed we only record state — the backlog was already cooked
+      // before this screen opened, so we don't reprint it.
+      if (!firstRun) printComanda(t, delta, round);
+      store.set(t._id, {
+        round: firstRun ? 1 : round,
+        qtys: Object.fromEntries(t.items.map((i) => [i.productId, i.quantity])),
+      });
+    }
+
+    // Forget tickets that have left the kitchen (paid/ready/cancelled).
+    const ids = new Set(list.map((t) => t._id));
+    for (const id of Array.from(store.keys())) {
+      if (!ids.has(id)) store.delete(id);
+    }
+    seeded.current = true;
+  }
 
   // Poll the feed.
   useEffect(() => {
