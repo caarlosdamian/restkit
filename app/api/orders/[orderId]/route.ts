@@ -6,6 +6,7 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext } from '@/lib/pos-auth';
 import { verifyWaiterToken, signWaiterToken } from '@/lib/waiter-token';
+import { inventoryService } from '@/services/inventory.service';
 
 type Params = Promise<{ orderId: string }>;
 
@@ -64,6 +65,10 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     );
   }
 
+  // Set once below if this request is the one that flips the order to PAID,
+  // so we deduct inventory exactly once, after the order itself is saved.
+  let deductInventory = false;
+
   if (body.status) {
     order.status = body.status;
     // First time the ticket reaches the kitchen → stamp the aging clock.
@@ -77,6 +82,11 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
       if (body.amountReceived != null) {
         order.amountReceived = Number(body.amountReceived);
         order.change = Math.max(0, Number(body.amountReceived) - order.total);
+      }
+      // Guard against double-deduction if PAID is re-applied (e.g. a retried PATCH).
+      if (!order.inventoryDeducted) {
+        deductInventory = true;
+        order.inventoryDeducted = true;
       }
     }
     // Free the table when the order closes (paid or cancelled).
@@ -92,6 +102,20 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   if (body.notes !== undefined) order.notes = body.notes;
 
   await order.save();
+
+  if (deductInventory) {
+    // Only products with a recipe touch inventory; failures here must not
+    // block a payment that already succeeded, so log and move on.
+    try {
+      await inventoryService.deductForOrder(
+        ctx.businessId,
+        order._id,
+        order.items.map((i) => ({ productId: i.productId, name: i.name, quantity: i.quantity }))
+      );
+    } catch (err) {
+      console.error('Inventory deduction failed for order', String(order._id), err);
+    }
+  }
 
   const res = NextResponse.json(order);
   if (waiter) {

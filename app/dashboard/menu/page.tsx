@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Product from "@/models/Product";
+import InventoryItem from "@/models/InventoryItem";
 import dbConnect from "@/lib/db";
 import ProductForm from "@/components/menu/ProductForm";
 import EditProductButton from "@/components/menu/EditProductButton";
@@ -48,6 +49,10 @@ export default async function MenuPage({
     products = products.filter((p) => !p.isAvailable);
   }
 
+  const inventoryItems = (
+    await InventoryItem.find({ businessId: session.user.businessId, isActive: true }).sort({ name: 1 })
+  ).map((i) => ({ id: i._id.toString(), name: i.name, unit: i.unit }));
+
   const allCategories = Array.from(
     new Set(
       await Product.find({ businessId: session.user.businessId })
@@ -73,7 +78,7 @@ export default async function MenuPage({
             {products.length} producto{products.length !== 1 ? "s" : ""} en {Object.keys(byCategory).length} categoría{Object.keys(byCategory).length !== 1 ? "s" : ""}
           </p>
         </div>
-        <ProductForm />
+        <ProductForm inventoryItems={inventoryItems} />
       </div>
 
       {/* Filters */}
@@ -92,7 +97,7 @@ export default async function MenuPage({
           </div>
           <p className="text-base font-semibold text-gray-900">Sin productos con estos filtros</p>
           <p className="text-sm text-gray-400 mt-1 mb-6">Ajusta los filtros o agrega nuevos productos.</p>
-          <ProductForm />
+          <ProductForm inventoryItems={inventoryItems} />
         </div>
       )}
 
@@ -134,7 +139,12 @@ export default async function MenuPage({
                       price: product.price,
                       category: product.category,
                       isAvailable: product.isAvailable,
+                      recipe: product.recipe?.map((r) => ({
+                        inventoryItemId: r.inventoryItemId.toString(),
+                        quantity: r.quantity,
+                      })),
                     }}
+                    inventoryItems={inventoryItems}
                   />
                   <DeleteProductButton productId={product._id.toString()} name={product.name} />
                 </div>

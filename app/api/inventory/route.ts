@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
-import Product from '@/models/Product';
+import InventoryItem from '@/models/InventoryItem';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 
@@ -11,11 +11,12 @@ export async function GET() {
 
   await dbConnect();
   const businessId = new mongoose.Types.ObjectId(session.user.businessId);
-  const products = await Product.find({
-    businessId,
-  }).sort({ category: 1, sortOrder: 1, name: 1 });
+  const items = await InventoryItem.find({ businessId, isActive: true }).sort({
+    category: 1,
+    name: 1,
+  });
 
-  return NextResponse.json(products);
+  return NextResponse.json(items);
 }
 
 export async function POST(req: Request) {
@@ -25,22 +26,22 @@ export async function POST(req: Request) {
   }
 
   await dbConnect();
-  const { name, description, price, category, isAvailable, recipe } = await req.json();
+  const { name, unit, quantity, lowStockThreshold, category, notes } = await req.json();
 
-  if (!name || price == null) {
-    return NextResponse.json({ error: 'Nombre y precio son requeridos' }, { status: 400 });
+  if (!name) {
+    return NextResponse.json({ error: 'Nombre es requerido' }, { status: 400 });
   }
 
   const businessId = new mongoose.Types.ObjectId(session.user.businessId);
-  const product = await Product.create({
-    name,
-    description,
-    price: Number(price),
-    category: category || 'General',
+  const item = await InventoryItem.create({
     businessId,
-    isAvailable: isAvailable !== false,
-    recipe: Array.isArray(recipe) && recipe.length > 0 ? recipe : undefined,
+    name,
+    unit: unit || 'unidad',
+    quantity: quantity != null ? Number(quantity) : 0,
+    lowStockThreshold: lowStockThreshold != null ? Number(lowStockThreshold) : 0,
+    category: category || 'General',
+    notes,
   });
 
-  return NextResponse.json(product, { status: 201 });
+  return NextResponse.json(item, { status: 201 });
 }

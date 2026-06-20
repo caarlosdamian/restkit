@@ -82,6 +82,9 @@ export default async function DashboardLayout({
           {canSeeAnalytics && (
             <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" />
           )}
+          {canSeeAnalytics && (
+            <NavLink href="/dashboard/inventory" icon={Package} label="Inventario" />
+          )}
 
           {/* Owner only */}
           {isOwner && (
@@ -93,7 +96,6 @@ export default async function DashboardLayout({
             <p className="text-[0.65rem] font-bold uppercase tracking-wider text-gray-300">Próximamente</p>
           </div>
           {[
-            { icon: Package, label: "Inventario" },
             { icon: FileText, label: "Facturación" },
             { icon: Truck, label: "Delivery" },
           ].map(({ icon: Icon, label }) => (

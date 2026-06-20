@@ -32,6 +32,9 @@ export interface IOrder extends Document {
   closedAt?: Date;
   /** When the ticket first entered the kitchen — drives KDS FIFO + aging timer. */
   kitchenAt?: Date;
+  /** True once inventory has been deducted for this order (PAID transition).
+   *  Guards against double-deduction if PAID is re-applied (e.g. retried PATCH). */
+  inventoryDeducted?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,6 +72,7 @@ const OrderSchema = new Schema<IOrder>(
     ticketNumber: { type: String },
     closedAt: { type: Date },
     kitchenAt: { type: Date },
+    inventoryDeducted: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

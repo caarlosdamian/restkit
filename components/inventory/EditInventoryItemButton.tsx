@@ -3,34 +3,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, X } from "lucide-react";
-import RecipeEditor, { RecipeLine, InventoryItemOption } from "./RecipeEditor";
 
-const SUGGESTED_CATEGORIES = [
-  "Entradas", "Platos fuertes", "Sopas", "Bebidas",
-  "Postres", "Especiales", "General",
-];
+const CATEGORIES = ["Ingredientes", "Bebidas", "Desechables", "Limpieza", "Equipo", "General"];
+const UNITS = ["unidad", "kg", "g", "l", "ml", "paquete", "caja"];
 
-interface Product {
+interface InventoryItem {
   id: string;
   name: string;
-  description?: string;
-  price: number;
+  unit: string;
+  lowStockThreshold: number;
   category: string;
-  isAvailable: boolean;
-  recipe?: RecipeLine[];
+  notes?: string;
 }
 
-export default function EditProductButton({
-  product,
-  inventoryItems = [],
-}: {
-  product: Product;
-  inventoryItems?: InventoryItemOption[];
-}) {
+export default function EditInventoryItemButton({ item }: { item: InventoryItem }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [recipe, setRecipe] = useState<RecipeLine[]>(product.recipe ?? []);
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -39,23 +28,23 @@ export default function EditProductButton({
     setError("");
     const fd = new FormData(e.currentTarget);
     try {
-      const res = await fetch(`/api/products/${product.id}`, {
+      const res = await fetch(`/api/inventory/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: fd.get("name"),
-          description: fd.get("description") || undefined,
-          price: Number(fd.get("price")),
-          category: (fd.get("category") as string).trim() || "General",
-          recipe,
+          unit: (fd.get("unit") as string)?.trim() || "unidad",
+          lowStockThreshold: Number(fd.get("lowStockThreshold") || 0),
+          category: (fd.get("category") as string)?.trim() || "General",
+          notes: fd.get("notes") || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al guardar");
       setOpen(false);
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setLoading(false);
     }
@@ -66,7 +55,7 @@ export default function EditProductButton({
       <button
         onClick={() => setOpen(true)}
         className="p-2 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-        title="Editar producto"
+        title="Editar artículo"
       >
         <Pencil size={15} />
       </button>
@@ -75,7 +64,7 @@ export default function EditProductButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-7">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-extrabold text-gray-900">Editar Producto</h2>
+              <h2 className="text-lg font-extrabold text-gray-900">Editar Artículo</h2>
               <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
@@ -89,19 +78,7 @@ export default function EditProductButton({
                 <input
                   name="name"
                   required
-                  defaultValue={product.name}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                  Descripción
-                </label>
-                <input
-                  name="description"
-                  defaultValue={product.description}
-                  placeholder="Descripción breve (opcional)"
+                  defaultValue={item.name}
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
                 />
               </div>
@@ -109,43 +86,64 @@ export default function EditProductButton({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                    Precio <span className="text-red-500">*</span>
+                    Unidad
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
-                    <input
-                      name="price"
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      required
-                      defaultValue={product.price}
-                      className="w-full pl-7 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-                    Categoría
-                  </label>
-                  {/* datalist allows free text AND shows suggestions */}
                   <input
-                    name="category"
-                    list="category-suggestions"
-                    defaultValue={product.category}
-                    placeholder="Ej. Bebidas"
+                    name="unit"
+                    list="unit-options-edit"
+                    defaultValue={item.unit}
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
                   />
-                  <datalist id="category-suggestions">
-                    {SUGGESTED_CATEGORIES.map((c) => (
-                      <option key={c} value={c} />
+                  <datalist id="unit-options-edit">
+                    {UNITS.map((u) => (
+                      <option key={u} value={u} />
                     ))}
                   </datalist>
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Alerta de stock bajo
+                  </label>
+                  <input
+                    name="lowStockThreshold"
+                    type="number"
+                    step="any"
+                    min={0}
+                    defaultValue={item.lowStockThreshold}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  />
+                </div>
               </div>
 
-              <RecipeEditor inventoryItems={inventoryItems} lines={recipe} onChange={setRecipe} />
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Categoría
+                </label>
+                <input
+                  name="category"
+                  list="category-options-edit"
+                  defaultValue={item.category}
+                  placeholder="Ej. Ingredientes"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+                <datalist id="category-options-edit">
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Notas
+                </label>
+                <input
+                  name="notes"
+                  defaultValue={item.notes}
+                  placeholder="Opcional"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+              </div>
 
               {error && (
                 <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
