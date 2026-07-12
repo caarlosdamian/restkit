@@ -13,9 +13,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RestKit — Fidelización Digital para Restaurantes y Cafeterías",
+  metadataBase: new URL(process.env.APP_URL || "http://localhost:3000"),
+  title: {
+    default: "RestKit — El sistema operativo para restaurantes",
+    template: "%s · RestKit",
+  },
   description:
-    "Reemplaza las tarjetas físicas de sellos por tarjetas digitales compatibles con Apple Wallet y Google Wallet.",
+    "POS, pantalla de cocina, inventario con recetas, analíticas, facturación CFDI 4.0 y fidelización digital — todo integrado en un solo panel, hecho para restaurantes en México.",
+  applicationName: "RestKit",
+  keywords: [
+    "POS restaurante",
+    "punto de venta",
+    "pantalla de cocina",
+    "KDS",
+    "inventario de restaurante",
+    "recetas",
+    "CFDI 4.0",
+    "facturación SAT",
+    "fidelización digital",
+    "Apple Wallet",
+    "Google Wallet",
+    "México",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: "RestKit",
+    locale: "es_MX",
+    url: "/",
+    title: "RestKit — El sistema operativo para restaurantes",
+    description:
+      "Un ecosistema completo en lugar de 6 herramientas distintas: POS, cocina, inventario, analíticas, facturación CFDI y fidelización, todo conectado.",
+  },
 };
 
 export default function RootLayout({
@@ -25,7 +53,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>

@@ -2,6 +2,7 @@
   "name": "restkit",
   "version": "0.1.0",
   "private": true,
+  "description": "Restaurant operating system for the Mexican market: POS, kitchen display (KDS), inventory with recipes, analytics, CFDI 4.0 invoicing, and Apple/Google Wallet loyalty.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
