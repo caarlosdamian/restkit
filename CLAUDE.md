@@ -114,7 +114,7 @@ Per-table order during a shift.
 - `tableId`, `tableName`, `businessId`, `staffId`, `status`, `items[]`, `total`, `notes`
 - **New payment fields**: `paymentMethod`, `amountReceived`, `change`, `ticketNumber`
 - Status flow: OPEN → IN_KITCHEN → READY → PAID/CANCELLED
-- One active order per table (enforced by compound index on tableId+status)
+- One active order per table (enforced by `uniq_active_order_per_table`, a **unique** partial index on `tableId` for OPEN/IN_KITCHEN/READY; `POST /api/orders` catches the E11000 race and returns the existing order)
 
 ### **OrderItem** (embedded in Order)
 - `productId`, `name`, `price`, `quantity`, `notes`, `addedBy`
@@ -374,7 +374,7 @@ All dashboard pages are async server components that:
 - `Product`: `businessId`, `category`, `sortOrder`, `name`
 - `Order`: 
   - `businessId`, `tableId`
-  - Compound: `{ tableId: 1, status: 1 }` with `partialFilterExpression` for active orders
+  - `uniq_active_order_per_table`: unique partial `{ tableId: 1 }` over active statuses (one active order per table, race-proof)
   - `createdAt` (for filtering by date)
 - `Customer`: `businessId`, `email`
 - `Visit`: `customerId`, `businessId`, `createdAt`
@@ -407,7 +407,7 @@ All dashboard pages are async server components that:
 3. **Service**: Add business logic in `services/`
 4. **API**: Create route in `app/api/` (check auth, call service, return JSON)
 5. **Page/Component**: Build UI in `app/dashboard/` or `components/`
-6. **Tests**: None currently (manual QA)
+6. **Tests**: `npm test` — Vitest + mongodb-memory-server in `tests/` (unit: token/receipt/session libs; integration: API route handlers with mocked better-auth session against in-memory Mongo). `npm run test:e2e` — Playwright UX suite in `e2e/` (self-contained: boots its own in-memory Mongo + `next dev` on port 3100; covers login, dashboard nav, menu/inventory forms, and the full POS shift). Add coverage for new routes/services and extend the E2E flow for new user-facing features.
 
 ### Type Safety
 

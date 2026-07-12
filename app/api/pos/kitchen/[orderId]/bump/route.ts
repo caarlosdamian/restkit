@@ -18,7 +18,11 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
 
   await dbConnect();
   const { orderId } = await params;
-  const body = await req.json();
+  // An aborted/empty request body must be a 400, not an unhandled 500.
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: 'productId o all requerido' }, { status: 400 });
+  }
 
   const order = await Order.findOne({
     _id: new mongoose.Types.ObjectId(orderId),

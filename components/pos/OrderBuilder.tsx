@@ -251,6 +251,10 @@ export default function OrderBuilder({ tableId: initialTableId, tableName: initi
   // Send to kitchen (works from any active status)
   async function sendToKitchen() {
     if (items.length === 0) return;
+    // Cancel any pending debounced auto-save: this request persists the same
+    // items, and a concurrent writer can lose (version conflict) leaving the
+    // kitchen without the ticket while the UI says "En cocina".
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaving(true);
     try {
       let oid = orderId;
@@ -267,6 +271,18 @@ export default function OrderBuilder({ tableId: initialTableId, tableName: initi
         if (!res.ok) return;
         oid = data._id;
         setOrderId(oid);
+        // If the debounced auto-save won the race, the POST returned that
+        // already-existing OPEN order without applying IN_KITCHEN — patch it
+        // explicitly so the ticket actually reaches the kitchen.
+        if (data.status !== "IN_KITCHEN") {
+          const patch = await fetch(`/api/orders/${oid}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", ...waiterHeader() },
+            body: JSON.stringify({ items, status: "IN_KITCHEN" }),
+          });
+          refreshWaiterFromResponse(patch);
+          if (!patch.ok) return; // don't claim "En cocina" on failure
+        }
       } else {
         const res = await fetch(`/api/orders/${oid}`, {
           method: "PATCH",
@@ -274,6 +290,7 @@ export default function OrderBuilder({ tableId: initialTableId, tableName: initi
           body: JSON.stringify({ items, status: "IN_KITCHEN" }),
         });
         refreshWaiterFromResponse(res);
+        if (!res.ok) return;
       }
       // Update snapshot so the new items no longer show as "pending"
       setKitchenSnapshot(new Map(items.map((i) => [i.productId, i.quantity])));

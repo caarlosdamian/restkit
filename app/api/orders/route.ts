@@ -64,18 +64,31 @@ export async function POST(req: Request) {
   // cocina" on a fresh table). Stamp kitchenAt so the KDS can order/age it.
   const goesToKitchen = status === 'IN_KITCHEN';
 
-  const order = await Order.create({
-    tableId: new mongoose.Types.ObjectId(tableId),
-    tableName: table.name || `Mesa ${table.number}`,
-    businessId: ctx.businessId,
-    staffId: actingStaffId,
-    status: goesToKitchen ? 'IN_KITCHEN' : 'OPEN',
-    items: (items ?? []).map((i: Record<string, unknown>) => ({ ...i, addedBy: actingStaffId })),
-    total,
-    ...(goesToKitchen ? { kitchenAt: new Date() } : {}),
-  });
-
-  return jsonWithRefreshedToken(order, waiter, ctx.businessIdStr, 201);
+  try {
+    const order = await Order.create({
+      tableId: new mongoose.Types.ObjectId(tableId),
+      tableName: table.name || `Mesa ${table.number}`,
+      businessId: ctx.businessId,
+      staffId: actingStaffId,
+      status: goesToKitchen ? 'IN_KITCHEN' : 'OPEN',
+      items: (items ?? []).map((i: Record<string, unknown>) => ({ ...i, addedBy: actingStaffId })),
+      total,
+      ...(goesToKitchen ? { kitchenAt: new Date() } : {}),
+    });
+    return jsonWithRefreshedToken(order, waiter, ctx.businessIdStr, 201);
+  } catch (err) {
+    // Unique index on active-order-per-table: a concurrent request created
+    // the order between our check and this insert — hand back theirs.
+    if ((err as { code?: number })?.code === 11000) {
+      const active = await Order.findOne({
+        tableId: new mongoose.Types.ObjectId(tableId),
+        businessId: ctx.businessId,
+        status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] },
+      });
+      if (active) return jsonWithRefreshedToken(active, waiter, ctx.businessIdStr);
+    }
+    throw err;
+  }
 }
 
 // Rolls the waiter's activity window forward by re-issuing a token on each

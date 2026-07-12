@@ -77,10 +77,17 @@ const OrderSchema = new Schema<IOrder>(
   { timestamps: true }
 );
 
-// Only one active order per table at a time
+// At most ONE active order per table, enforced by the database. Concurrent
+// creators (two terminals opening the same table, StrictMode double-mounts)
+// race the application-level existence check; the loser gets an E11000 that
+// POST /api/orders turns into "return the existing active order".
 OrderSchema.index(
-  { tableId: 1, status: 1 },
-  { partialFilterExpression: { status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] } } }
+  { tableId: 1 },
+  {
+    name: 'uniq_active_order_per_table',
+    unique: true,
+    partialFilterExpression: { status: { $in: ['OPEN', 'IN_KITCHEN', 'READY'] } },
+  }
 );
 
 const Order: Model<IOrder> =
