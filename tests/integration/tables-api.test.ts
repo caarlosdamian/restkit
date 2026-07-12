@@ -65,6 +65,36 @@ describe('POST /api/tables', () => {
     expect(res.status).toBe(201);
     expect(await res.json()).toMatchObject({ name: 'Mesa 12', capacity: 4, isActive: true });
   });
+
+  it('accepts an optional section', async () => {
+    signInAs(oid(), 'OWNER');
+    const res = await createTable(
+      jsonRequest('/api/tables', { method: 'POST', body: { number: 3, section: 'Terraza' } })
+    );
+    expect(await res.json()).toMatchObject({ section: 'Terraza' });
+  });
+
+  it('409s on a duplicate table number for the same business (never a raw 500)', async () => {
+    const businessId = oid();
+    signInAs(businessId, 'OWNER');
+    await Table.create({ businessId, number: 7 });
+
+    const res = await createTable(
+      jsonRequest('/api/tables', { method: 'POST', body: { number: 7 } })
+    );
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/7/);
+    expect(await Table.countDocuments({ businessId, number: 7 })).toBe(1);
+  });
+
+  it('the same table number is fine across different businesses', async () => {
+    await Table.create({ businessId: oid(), number: 1 });
+    signInAs(oid(), 'OWNER');
+    const res = await createTable(
+      jsonRequest('/api/tables', { method: 'POST', body: { number: 1 } })
+    );
+    expect(res.status).toBe(201);
+  });
 });
 
 describe('PATCH/DELETE /api/tables/[tableId]', () => {
@@ -86,6 +116,20 @@ describe('PATCH/DELETE /api/tables/[tableId]', () => {
       routeParams({ tableId: foreign._id.toString() })
     );
     expect(stolen.status).toBe(404);
+  });
+
+  it('409s when editing a table to a number already used by another table', async () => {
+    const businessId = oid();
+    signInAs(businessId, 'OWNER');
+    await Table.create({ businessId, number: 1 });
+    const mesa2 = await Table.create({ businessId, number: 2 });
+
+    const res = await patchTable(
+      jsonRequest(`/api/tables/${mesa2._id}`, { method: 'PATCH', body: { number: 1 } }),
+      routeParams({ tableId: mesa2._id.toString() })
+    );
+    expect(res.status).toBe(409);
+    expect((await Table.findById(mesa2._id))!.number).toBe(2); // unchanged
   });
 
   it('DELETE soft-deletes so the table survives for history', async () => {

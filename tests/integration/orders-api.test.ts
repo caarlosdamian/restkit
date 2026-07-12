@@ -71,8 +71,7 @@ describe('POST /api/orders', () => {
     const businessId = oid();
     signInAs(businessId);
     const table = await makeTable(businessId);
-    // Make sure the unique partial index exists before racing the inserts.
-    await Order.init();
+    // Unique partial index is now guaranteed built by startTestDb() itself.
 
     const body = { tableId: table._id.toString(), items: [item(oid())] };
     // Same race as two terminals (or a StrictMode double-mount) opening the

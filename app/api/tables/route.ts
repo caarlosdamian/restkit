@@ -51,17 +51,25 @@ export async function POST(req: Request) {
   }
 
   await dbConnect();
-  const { number, name, capacity } = await req.json();
+  const { number, name, capacity, section } = await req.json();
 
   if (!number) return NextResponse.json({ error: 'El número de mesa es requerido' }, { status: 400 });
 
   const businessId = new mongoose.Types.ObjectId(session.user.businessId);
-  const table = await Table.create({
-    number,
-    name: name || `Mesa ${number}`,
-    capacity: capacity || 4,
-    businessId,
-  });
-
-  return NextResponse.json(table, { status: 201 });
+  try {
+    const table = await Table.create({
+      number,
+      name: name || `Mesa ${number}`,
+      capacity: capacity || 4,
+      section,
+      businessId,
+    });
+    return NextResponse.json(table, { status: 201 });
+  } catch (err) {
+    // Unique index on {businessId, number}.
+    if ((err as { code?: number })?.code === 11000) {
+      return NextResponse.json({ error: `Ya existe una mesa con el número ${number}` }, { status: 409 });
+    }
+    throw err;
+  }
 }

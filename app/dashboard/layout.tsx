@@ -7,7 +7,7 @@ import {
   Home, Users, Settings, UserCog, Gift,
   ChefHat, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
-  ShoppingCart, ExternalLink,
+  ShoppingCart, ExternalLink, LayoutGrid,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -75,6 +75,9 @@ export default async function DashboardLayout({
           {/* Owner / Admin — menu management + orders */}
           {canSeeAnalytics && (
             <NavLink href="/dashboard/menu" icon={UtensilsCrossed} label="Menú" />
+          )}
+          {canSeeAnalytics && (
+            <NavLink href="/dashboard/tables" icon={LayoutGrid} label="Mesas" />
           )}
           {canSeeAnalytics && (
             <NavLink href="/dashboard/orders" icon={ClipboardList} label="Historial" />

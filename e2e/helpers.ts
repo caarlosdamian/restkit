@@ -9,6 +9,14 @@ export const OWNER = {
   password: 'Sup3rSecreta!',
 };
 
+/** A second, never-seeded business — used to test the fresh-database path. */
+export const FRESH_OWNER = {
+  businessName: 'Cocina Fresca E2E',
+  name: 'Dueña Fresca E2E',
+  email: 'fresh-owner@e2e.local',
+  password: 'Sup3rSecreta!',
+};
+
 /** better-auth session persisted by global.setup.ts and reused by specs. */
 export const OWNER_STATE = 'e2e/.auth/owner.json';
 

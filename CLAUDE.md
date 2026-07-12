@@ -2,6 +2,8 @@
 
 **RestKit** is a comprehensive restaurant management system for the Mexican market, built with Next.js 16, MongoDB, TypeScript, and React 19. It started as a loyalty card system (Apple/Google Wallet) and has evolved into a full POS, analytics, and business management platform.
 
+**Related docs**: [`docs/FEATURES_AND_TESTING.md`](docs/FEATURES_AND_TESTING.md) (full route/feature map + test suites), [`docs/DEPLOY_VERCEL.md`](docs/DEPLOY_VERCEL.md) (production deployment steps).
+
 ---
 
 ## Tech Stack
@@ -52,6 +54,7 @@ The POS was refactored away from an insecure localStorage flow. **The POS now li
 - Pages: entire `app/dashboard/pos/*` tree (grid, order, table-layout editor, staff/waiter login + lobby).
 - Components: `StaffLoginForm`, `WaiterLoginForm`, `TableLayoutEditor`, `POSContainer`, `AddTableButton`, `POSPageWrapper`, `TablesFilterBar`.
 - API routes: `api/pos/login`, `api/staff/login`, `api/waiter/check-in`, `api/tables/layout`, `api/staff/[staffId]/tables` (old passwordless lookups / layout editor).
+- ⚠️ Deleting the old `AddTableButton`/`TableLayoutEditor` left **no dashboard UI to create tables at all** until `/dashboard/tables` (see Dashboard Pages below) was added later — that page is a new, unrelated feature (simple form + list, no drag-and-drop layout), not a recreation of the deleted layout editor.
 
 ---
 
@@ -152,8 +155,8 @@ All routes require authentication via `better-auth`.
 
 ### Tables
 - `GET /api/tables` — List active tables with their open orders
-- `POST /api/tables` — Create table (OWNER/ADMIN)
-- `PATCH /api/tables/[tableId]` — Update table (OWNER/ADMIN)
+- `POST /api/tables` — Create table (OWNER/ADMIN). 409 on a duplicate `number` within the business (unique `{businessId, number}` index)
+- `PATCH /api/tables/[tableId]` — Update table (OWNER/ADMIN). Same 409 on a number collision
 - `DELETE /api/tables/[tableId]` — Soft-delete table (OWNER/ADMIN)
 
 ### Products
@@ -230,6 +233,12 @@ Menu management (OWNER/ADMIN).
 - Products grouped by category
 - Add/edit/delete/toggle-availability per product
 - ProductForm uses datalist for category (can enter custom)
+
+### `/dashboard/tables` (NEW)
+Table management (OWNER/ADMIN). The only UI path to create tables — a freshly registered business has none until a manager adds them here (previously tables could only be created via the demo seed routes or the raw API; this page closes that gap). Grouped by section; add/edit/soft-delete via `TableForm`/`EditTableButton`/`DeleteTableButton` in `components/tables/`. `POST`/`PATCH /api/tables` 409 on a duplicate table number within the business instead of a raw 500.
+
+### `/dashboard/inventory`
+Inventory management (OWNER/ADMIN). Items grouped by category with low-stock/out-of-stock badges; add/edit/soft-delete via `InventoryItemForm`/`EditInventoryItemButton`/`DeleteInventoryItemButton`, stock changes only through `StockAdjustButton` (RESTOCK/WASTE/ADJUSTMENT), never by editing quantity directly — see Inventory data model above.
 
 ### `/dashboard/customers`
 Customer grid with visit progress bars and loyalty status.
@@ -437,5 +446,5 @@ All dashboard pages are async server components that:
 
 ---
 
-**Last updated**: 2026-06-07  
-**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, and busy-table tracking. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters.
+**Last updated**: 2026-07-12  
+**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes).

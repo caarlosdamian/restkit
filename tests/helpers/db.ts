@@ -24,6 +24,13 @@ export async function startTestDb(): Promise<void> {
   const c = cache();
   c.conn = conn;
   c.promise = Promise.resolve(conn);
+
+  // Model.init() builds indexes in the background; a test that races a
+  // unique index (e.g. duplicate table number, duplicate active order) right
+  // after connect can run before the build finishes and get a false pass.
+  // Every model imported by a test file is already registered by the time
+  // its beforeAll(startTestDb) runs, so build all of them up front here once.
+  await Promise.all(Object.values(mongoose.connection.models).map((m) => m.init()));
 }
 
 export async function stopTestDb(): Promise<void> {
