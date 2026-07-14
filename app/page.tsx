@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
+import PricingSection from "@/components/landing/PricingSection";
 import {
   CreditCard, Smartphone, BarChart3, QrCode, Bell, ArrowRight,
   ChevronRight, ShoppingCart, Monitor, Package, FileText,
@@ -23,7 +24,7 @@ export default async function LandingPage() {
       <LoyaltySpotlight />
       <AnalyticsPreview />
       <MexicoFirst />
-      <Pricing />
+      <PricingSection />
       <Testimonials />
       <CtaBanner />
       <Footer />
@@ -490,90 +491,6 @@ function MexicoFirst() {
               </div>
               <h3 className="text-sm font-bold text-gray-900 mb-1.5">{item.title}</h3>
               <p className="text-sm text-gray-500 leading-relaxed">{item.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─── PRICING ─── */
-function Pricing() {
-  const plans = [
-    {
-      name: "Básico",
-      price: "$599",
-      period: "/mes",
-      desc: "Ideal para cafeterías y negocios pequeños.",
-      features: ["POS en 1 dispositivo", "Menú QR digital", "Fidelización (wallet)", "Facturación CFDI", "Soporte por email"],
-      cta: "Comenzar gratis",
-      highlight: false,
-    },
-    {
-      name: "Profesional",
-      price: "$1,299",
-      period: "/mes",
-      desc: "Para restaurantes que necesitan más control.",
-      features: ["POS ilimitado", "KDS cocina + barra", "Inventario y recetas", "25+ reportes", "Soporte prioritario", "Delivery integrado"],
-      cta: "Comenzar gratis",
-      highlight: true,
-    },
-    {
-      name: "Empresa",
-      price: "A medida",
-      period: "",
-      desc: "Para cadenas y franquicias con múltiples sucursales.",
-      features: ["Sucursales ilimitadas", "API & webhooks", "Manager central", "Reportes consolidados", "Onboarding dedicado", "SLA garantizado"],
-      cta: "Hablar con ventas",
-      highlight: false,
-    },
-  ];
-
-  return (
-    <section className="py-24" id="precios">
-      <div className="max-w-[1200px] mx-auto px-6">
-        <div className="text-center mb-12">
-          <span className="text-xs font-bold tracking-widest uppercase text-emerald-600">Precios</span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mt-2 mb-3">
-            Transparente, sin sorpresas
-          </h2>
-          <p className="text-base text-gray-500">14 días de prueba gratis. Sin tarjeta de crédito.</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
-          {plans.map((p) => (
-            <div
-              key={p.name}
-              className={`rounded-2xl border p-8 relative ${p.highlight ? "border-emerald-500 shadow-lg shadow-emerald-500/10 bg-white" : "border-gray-200 bg-white"}`}
-            >
-              {p.highlight && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[0.7rem] font-bold px-3 py-1 rounded-full">
-                  Más popular
-                </span>
-              )}
-              <p className="text-sm font-bold text-gray-900 mb-1">{p.name}</p>
-              <div className="flex items-end gap-1 mb-1">
-                <span className="text-4xl font-extrabold tracking-tight text-gray-900">{p.price}</span>
-                <span className="text-sm text-gray-400 mb-1">{p.period}</span>
-              </div>
-              <p className="text-xs text-gray-400 mb-6">{p.desc}</p>
-              <ul className="space-y-2.5 mb-8">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-center gap-2.5 text-sm text-gray-600">
-                    <Check size={14} className="text-emerald-500 shrink-0" /> {f}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/registro"
-                className={`block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors no-underline ${
-                  p.highlight
-                    ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                    : "border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700"
-                }`}
-              >
-                {p.cta}
-              </Link>
             </div>
           ))}
         </div>

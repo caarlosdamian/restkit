@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import POSSession from '@/models/POSSession';
+import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext, isManager } from '@/lib/pos-auth';
+import { evaluateSubscription } from '@/lib/subscription';
 
 export async function POST(req: Request) {
   const ctx = await getBusinessContext();
@@ -12,6 +14,17 @@ export async function POST(req: Request) {
   }
 
   await dbConnect();
+
+  // Selling requires an active subscription. Opening the register is the money
+  // gate for the POS — an expired trial can't start a shift.
+  const business = await Business.findById(ctx.businessId).select('subscription');
+  if (evaluateSubscription(business?.subscription).needsUpgrade) {
+    return NextResponse.json(
+      { error: 'Tu suscripción expiró. Reactívala para abrir la caja.', code: 'SUBSCRIPTION_REQUIRED' },
+      { status: 402 }
+    );
+  }
+
   const { openingBalance } = await req.json();
 
   if (openingBalance === undefined) {

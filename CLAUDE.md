@@ -99,6 +99,7 @@ Role-based access control (RBAC). Three roles: OWNER, ADMIN, STAFF.
 Restaurant entity. One per subscription account.
 - `name`, `slug`, `branding` (logo, primaryColor), `settings` (requiredVisits, rewardDescription)
 - **ticket** (NEW): `fiscalName`, `rfc`, `phone`, `address`, `fiscalAddress`, `website`, `footerMessage`
+- **subscription** (NEW): `plan` (basic/pro/enterprise), `billingPeriod` (monthly/annual), `status` (trialing/active/past_due/canceled), `trialEndsAt`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodEnd`. New businesses start `trialing` for 14 days with **no card** (set in `businessService`). Gate logic in `lib/subscription.ts` (`evaluateSubscription`) is conservative — a **missing** subscription is grandfathered (never gated), so legacy/seed businesses and tests aren't locked out. See Billing section.
 - Used to scope all other data (tables, products, orders, customers, staff)
 
 ### **Table**
@@ -200,6 +201,13 @@ All routes require authentication via `better-auth`.
 - `PATCH /api/staff/[staffId]` — Set/reset a staff member's POS PIN (`{ pin }`).
 - `DELETE /api/staff/[staffId]` — Remove staff (+ sessions/accounts)
 
+### Billing — Stripe subscriptions (NEW)
+- `POST /api/billing/checkout` (OWNER) — subscription Checkout session for `{ plan, period }`; reuses/creates the Stripe customer, returns `{ url }`.
+- `POST /api/billing/portal` (OWNER) — Stripe Billing Portal session, returns `{ url }`.
+- `POST /api/stripe/webhook` — raw-body, `STRIPE_WEBHOOK_SECRET`-verified; `billingService.applyStripeEvent` maps `customer.subscription.*` → `Business.subscription`.
+- **Plan catalog** = single source of truth in `lib/plans.ts` (pure data, no Stripe/env — shared by client pricing UI + server). `lib/stripe.ts` = guarded client (`requireStripe()`) + `priceIdFor(plan, period)` (reads `STRIPE_PRICE_*` env). `lib/subscription.ts` = `evaluateSubscription` gate.
+- **Trial-without-card**: signup starts a 14-day `trialing`; trial expiry is time-based (no Stripe involvement until they pay). Gate: dashboard layout walls expired businesses (except `/dashboard/billing`) via the `x-pathname` header set in `proxy.ts`; `POST /api/pos-session/start` returns **402** when expired (can't open the register). The app is fully usable during the trial with **no Stripe config**; checkout just 500s with a clear "price not configured" until `STRIPE_PRICE_*` are set.
+
 ### Settings
 - `GET /api/settings` — Fetch business settings
 - `PATCH /api/settings` — Update business settings (OWNER/ADMIN)
@@ -269,6 +277,9 @@ Staff list and invite (OWNER only).
 - Shows role badges (Dueño/Gerente/Empleado)
 - AddStaffForm modal
 - RemoveStaffButton per staff member
+
+### `/dashboard/billing` (NEW)
+Subscription management (OWNER only). Current status (trial countdown / active / past_due / canceled), plan chooser with monthly/annual toggle → Stripe Checkout (`components/billing/BillingPlans`), and "Administrar facturación" → Billing Portal (`ManageBillingButton`). Always reachable even when the gate is active (the layout exempts it) so an expired business can pay. Trial businesses see a `TrialBanner` across the dashboard; expired ones see `UpgradeWall` instead of page content.
 
 ### `/dashboard/settings` (NEW)
 Business configuration (OWNER/ADMIN, redirects STAFF to /customers).
@@ -442,9 +453,9 @@ All dashboard pages are async server components that:
 - [ ] Multi-location support
 - [ ] Advanced reporting & exports
 - [ ] Mobile app (React Native or Flutter)
-- [ ] Real payment processor integration
+- [x] ~~Real payment processor integration~~ — **done**: Stripe subscription billing (trial-without-card, plan-aware signup, checkout/portal/webhook, dashboard gate). See Billing section.
 
 ---
 
 **Last updated**: 2026-07-12  
-**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes).
+**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes), and **Stripe subscription billing** (14-day trial-without-card, pricing→signup plan selection, checkout/portal/webhook, POS + dashboard subscription gate).

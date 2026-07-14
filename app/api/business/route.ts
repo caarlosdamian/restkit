@@ -4,7 +4,7 @@ import { businessService } from "@/services/business.service";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { businessName, ownerId, ownerName, ownerEmail } = body;
+    const { businessName, ownerId, ownerName, ownerEmail, plan, billingPeriod } = body;
 
     if (!businessName || !ownerId || !ownerName || !ownerEmail) {
       return Response.json(
@@ -18,6 +18,8 @@ export async function POST(req: Request) {
       ownerId,
       ownerName,
       ownerEmail,
+      plan,
+      billingPeriod,
     });
 
     return Response.json({ success: true, business });

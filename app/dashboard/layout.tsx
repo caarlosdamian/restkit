@@ -3,11 +3,16 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
+import Business from "@/models/Business";
+import dbConnect from "@/lib/db";
+import { evaluateSubscription } from "@/lib/subscription";
+import UpgradeWall from "@/components/billing/UpgradeWall";
+import TrialBanner from "@/components/billing/TrialBanner";
 import {
   Home, Users, Settings, UserCog, Gift,
   ChefHat, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
-  ShoppingCart, ExternalLink, LayoutGrid,
+  ShoppingCart, ExternalLink, LayoutGrid, CreditCard,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -15,13 +20,27 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const hdrs = await headers();
+  const session = await auth.api.getSession({ headers: hdrs });
   if (!session) redirect("/login");
 
   const role = session.user.role as string;
   const isOwner = role === "OWNER";
   const isAdmin = role === "ADMIN";
   const canSeeAnalytics = isOwner || isAdmin;
+
+  // Subscription gate. The billing page is always reachable (so an expired
+  // business can pay), everything else is blocked once the trial/subscription
+  // lapses. Missing subscription data is grandfathered — see lib/subscription.
+  let sub = { active: true, trialing: false, trialDaysLeft: 0, needsUpgrade: false, subscribed: false, status: "none" } as ReturnType<typeof evaluateSubscription>;
+  if (session.user.businessId) {
+    await dbConnect();
+    const business = await Business.findById(session.user.businessId).select("subscription");
+    sub = evaluateSubscription(business?.subscription);
+  }
+  const pathname = hdrs.get("x-pathname") || "";
+  const onBillingPage = pathname.startsWith("/dashboard/billing");
+  const gated = sub.needsUpgrade && !onBillingPage;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -93,6 +112,9 @@ export default async function DashboardLayout({
           {isOwner && (
             <NavLink href="/dashboard/staff" icon={UserCog} label="Empleados" />
           )}
+          {isOwner && (
+            <NavLink href="/dashboard/billing" icon={CreditCard} label="Suscripción" />
+          )}
 
           {/* Coming soon */}
           <div className="mt-4 mb-2 px-3">
@@ -133,7 +155,16 @@ export default async function DashboardLayout({
           </div>
         </header>
         <div className="p-8 flex-1">
-          <div className="max-w-[1100px] mx-auto">{children}</div>
+          <div className="max-w-[1100px] mx-auto">
+            {gated ? (
+              <UpgradeWall />
+            ) : (
+              <>
+                {sub.trialing && !sub.subscribed && <TrialBanner daysLeft={sub.trialDaysLeft} />}
+                {children}
+              </>
+            )}
+          </div>
         </div>
       </main>
     </div>

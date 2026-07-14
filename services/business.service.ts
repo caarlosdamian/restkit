@@ -2,6 +2,7 @@ import { businessRepository } from "@/repositories/business.repository";
 import dbConnect from "@/lib/db";
 import { auth } from "@/lib/auth";
 import mongoose from "mongoose";
+import { TRIAL_DAYS, toSelfServePlanId, toBillingPeriod } from "@/lib/plans";
 
 export const businessService = {
   async registerBusinessAndOwner(data: {
@@ -9,8 +10,16 @@ export const businessService = {
     ownerName: string;
     ownerEmail: string;
     ownerId: string; // From Better Auth
+    /** Plan chosen on the pricing page, carried through signup. Optional. */
+    plan?: string;
+    billingPeriod?: string;
   }) {
     await dbConnect();
+
+    // Every new business starts a 14-day trial with no card (trial-without-card).
+    // The gate only kicks in once trialEndsAt passes and they haven't paid.
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const selectedPlan = toSelfServePlanId(data.plan) ?? "pro";
 
     // 1. Create Business with unique slug
     let slug = data.businessName
@@ -19,7 +28,7 @@ export const businessService = {
       .replace(/[^\w-]+/g, "");
 
     // Ensure slug is unique by appending random suffix if needed
-    let existingSlug = await businessRepository.findBySlug(slug);
+    const existingSlug = await businessRepository.findBySlug(slug);
     if (existingSlug) {
       slug = `${slug}-${Math.random().toString(36).substr(2, 6)}`;
     }
@@ -46,11 +55,18 @@ export const businessService = {
           website: undefined,
           footerMessage: '¡Gracias por tu visita!',
         },
+        subscription: {
+          plan: selectedPlan,
+          billingPeriod: toBillingPeriod(data.billingPeriod),
+          status: 'trialing' as const,
+          trialEndsAt,
+        },
       };
 
       console.log("Creating business with data:", businessData);
       business = await businessRepository.create(businessData);
       console.log("Business created successfully:", business._id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Business creation error:", error);
       console.error("Error details:", error.message, error.errors);
