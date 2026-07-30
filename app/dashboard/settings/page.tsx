@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import dbConnect from "@/lib/db";
 import { businessRepository } from "@/repositories/business.repository";
 import SettingsForm from "@/components/settings/SettingsForm";
 
@@ -9,6 +10,7 @@ export default async function SettingsPage() {
   if (!session) redirect("/login");
   if (session.user.role === "STAFF") redirect("/dashboard/customers");
 
+  await dbConnect();
   const business = await businessRepository.findById(session.user.businessId);
   if (!business) redirect("/dashboard");
 

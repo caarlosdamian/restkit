@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import dbConnect from '@/lib/db';
 import { customerService } from '@/services/customer.service';
 import { businessRepository } from '@/repositories/business.repository';
 import RecordVisitButton from '@/components/dashboard/RecordVisitButton';
@@ -21,6 +22,7 @@ export default async function CustomerDetailPage({
     return <div>No se encontró configuración de negocio.</div>;
   }
 
+  await dbConnect();
   const [customer, business] = await Promise.all([
     customerService.getCustomerById(id, session.user.businessId),
     businessRepository.findById(session.user.businessId),

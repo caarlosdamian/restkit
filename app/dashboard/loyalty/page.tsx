@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import dbConnect from "@/lib/db";
 import { analyticsService } from "@/services/analytics.service";
 import { businessRepository } from "@/repositories/business.repository";
 import Link from "next/link";
@@ -13,6 +14,7 @@ export default async function LoyaltyPage() {
   if (session.user.role === "STAFF") redirect("/dashboard/customers");
   if (!session?.user?.businessId) return <div>Sin negocio configurado.</div>;
 
+  await dbConnect();
   const [stats, business] = await Promise.all([
     analyticsService.getDashboardStats(session.user.businessId),
     businessRepository.findById(session.user.businessId),

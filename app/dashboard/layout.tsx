@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
 import { evaluateSubscription, featureAllowed } from "@/lib/subscription";
@@ -50,22 +51,20 @@ export default async function DashboardLayout({
   const onBillingPage = pathname.startsWith("/dashboard/billing");
   const gated = sub.needsUpgrade && !onBillingPage;
 
-  return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shrink-0">
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-gray-100">
-          <Link href="/" className="flex items-center gap-2 text-gray-900 font-bold text-lg tracking-tight no-underline">
-            <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect width="32" height="32" rx="8" fill="#10b981" />
-              <path d="M10 16L16 10L22 16L16 22Z" fill="white" />
-            </svg>
-            RestKit
-          </Link>
-        </div>
+  const sidebarContent = (
+    <>
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-gray-100">
+        <Link href="/" className="flex items-center gap-2 text-gray-900 font-bold text-lg tracking-tight no-underline">
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <rect width="32" height="32" rx="8" fill="#10b981" />
+            <path d="M10 16L16 10L22 16L16 22Z" fill="white" />
+          </svg>
+          RestKit
+        </Link>
+      </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-0.5">
+      <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-0.5">
           {/* Owner / Admin — analytics home */}
           {canSeeAnalytics && (
             <NavLink href="/dashboard" icon={Home} label="Inicio" />
@@ -152,31 +151,30 @@ export default async function DashboardLayout({
             </div>
           )}
         </nav>
-      </aside>
+    </>
+  );
 
-      {/* Main */}
-      <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-        <header className="flex items-center justify-between bg-white border-b border-gray-100 px-8 py-4 sticky top-0 z-10">
-          <p className="text-sm font-semibold text-gray-900">{session.user.name}</p>
-          <div className="flex items-center gap-3">
-            <RoleBadge role={role} />
-            <LogoutButton />
-          </div>
-        </header>
-        <div className="p-8 flex-1">
-          <div className="max-w-[1100px] mx-auto">
-            {gated ? (
-              <UpgradeWall />
-            ) : (
-              <>
-                {sub.trialing && !sub.subscribed && <TrialBanner daysLeft={sub.trialDaysLeft} />}
-                {children}
-              </>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
+  const headerContent = (
+    <>
+      <p className="text-sm font-semibold text-gray-900 truncate min-w-0">{session.user.name}</p>
+      <div className="flex items-center gap-2 md:gap-3 shrink-0">
+        <RoleBadge role={role} />
+        <LogoutButton />
+      </div>
+    </>
+  );
+
+  return (
+    <DashboardShell sidebar={sidebarContent} header={headerContent}>
+      {gated ? (
+        <UpgradeWall />
+      ) : (
+        <>
+          {sub.trialing && !sub.subscribed && <TrialBanner daysLeft={sub.trialDaysLeft} />}
+          {children}
+        </>
+      )}
+    </DashboardShell>
   );
 }
 
