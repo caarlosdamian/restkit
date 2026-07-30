@@ -1,4 +1,5 @@
 import type { ISubscription } from '@/models/Business';
+import { planAllows, type FeatureId } from '@/lib/plans';
 
 /**
  * Pure evaluation of a business's subscription into an access decision. No DB,
@@ -71,9 +72,13 @@ export function evaluateSubscription(
   const trialEndsAt = toDate(sub.trialEndsAt);
   const currentPeriodEnd = toDate(sub.currentPeriodEnd);
   const periodValid = currentPeriodEnd ? currentPeriodEnd.getTime() > now.getTime() : false;
-  // A Stripe subscription id means they committed to a paid plan (even if it's
-  // currently in a Stripe trial). status 'active' implies it too.
-  const subscribed = !!sub.stripeCustomerId || sub.status === 'active';
+  // A Stripe SUBSCRIPTION id means they committed to a paid plan (even if it's
+  // currently in a Stripe trial). status 'active' implies it too. A customer id
+  // alone is NOT enough — Stripe creates one the moment checkout is opened,
+  // even if it's abandoned; treating that as "purchased" would hide the trial
+  // banner and tier-gate a free-trial business to the plan they merely clicked.
+  const subscribed = !!sub.stripeSubscriptionId || sub.status === 'active';
+
   if (sub.status === 'trialing') {
     const trialValid = trialEndsAt ? trialEndsAt.getTime() > now.getTime() : false;
     const trialDaysLeft = trialValid
@@ -109,4 +114,30 @@ export function evaluateSubscription(
     subscribed,
     status: sub.status,
   };
+}
+
+/**
+ * Tier gate: does this business's subscription include a feature?
+ * Layered on top of the access gate (`needsUpgrade`), which still wins — this
+ * only differentiates WHAT an in-good-standing business can use.
+ *
+ * Semantics (same conservative philosophy as above):
+ *  - Grandfathered (no subscription data) → everything. Legacy/seed docs are
+ *    never feature-gated.
+ *  - Free trial, no purchased plan → everything. The trial shows off the full
+ *    product; tier limits only bite once they're actually paying.
+ *  - Purchased → their plan's tier (basic loses pro-only features). Missing
+ *    plan on a purchased sub → allow, never wrongly lock out.
+ */
+export function featureAllowed(
+  sub: ISubscription | null | undefined,
+  feature: FeatureId,
+  now: Date = new Date()
+): boolean {
+  const view = evaluateSubscription(sub, now);
+  if (view.status === 'none') return true; // grandfathered
+  if (!view.subscribed) return true; // free trial — full access (expiry is needsUpgrade's job)
+  const plan = sub?.plan;
+  if (!plan) return true;
+  return planAllows(plan, feature);
 }

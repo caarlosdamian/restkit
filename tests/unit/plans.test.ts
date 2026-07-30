@@ -6,7 +6,9 @@ import {
   formatMXN,
   toSelfServePlanId,
   toBillingPeriod,
+  planAllows,
   ANNUAL_DISCOUNT,
+  type FeatureId,
 } from '@/lib/plans';
 
 describe('plan catalog', () => {
@@ -49,5 +51,20 @@ describe('plan catalog', () => {
     expect(toBillingPeriod('monthly')).toBe('monthly');
     expect(toBillingPeriod('')).toBe('monthly');
     expect(toBillingPeriod(undefined)).toBe('monthly');
+  });
+});
+
+describe('planAllows (tier gating)', () => {
+  const GATED: FeatureId[] = ['inventory', 'kds', 'reports'];
+
+  it('basic excludes every pro-only feature', () => {
+    for (const f of GATED) expect(planAllows('basic', f)).toBe(false);
+  });
+
+  it('pro and enterprise include everything gateable', () => {
+    for (const f of GATED) {
+      expect(planAllows('pro', f)).toBe(true);
+      expect(planAllows('enterprise', f)).toBe(true);
+    }
   });
 });

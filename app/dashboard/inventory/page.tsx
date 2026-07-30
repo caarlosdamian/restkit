@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import InventoryItem from "@/models/InventoryItem";
 import dbConnect from "@/lib/db";
+import { businessAllows } from "@/lib/feature-gate";
+import ProFeatureWall from "@/components/billing/ProFeatureWall";
 import InventoryItemForm from "@/components/inventory/InventoryItemForm";
 import EditInventoryItemButton from "@/components/inventory/EditInventoryItemButton";
 import DeleteInventoryItemButton from "@/components/inventory/DeleteInventoryItemButton";
@@ -26,6 +28,16 @@ export default async function InventoryPage({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
   if (session.user.role === "STAFF") redirect("/pos");
+
+  // Tier gate: inventory is a Profesional feature.
+  if (!(await businessAllows(session.user.businessId, "inventory"))) {
+    return (
+      <ProFeatureWall
+        featureName="Inventario"
+        description="Controla existencias, mermas y recetas de tu cocina. Disponible en el plan Profesional."
+      />
+    );
+  }
 
   const sp = await searchParams;
   const search = (sp.search || "").toLowerCase();

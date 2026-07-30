@@ -62,6 +62,9 @@ export default function KitchenDisplay() {
   const router = useRouter();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  // Plan tier doesn't include KDS (server returned 403) — show the upsell
+  // instead of an empty board.
+  const [planBlocked, setPlanBlocked] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // Lines being bumped — keeps the tap responsive before the next poll.
   const bumping = useRef<Set<string>>(new Set());
@@ -81,7 +84,12 @@ export default function KitchenDisplay() {
         router.push("/pos");
         return;
       }
+      if (res.status === 403) {
+        setPlanBlocked(true);
+        return;
+      }
       if (res.ok) {
+        setPlanBlocked(false);
         const data = await res.json();
         const list: Ticket[] = data.tickets ?? [];
         setTickets(list);
@@ -208,7 +216,27 @@ export default function KitchenDisplay() {
         </div>
       </div>
 
-      {loading ? (
+      {planBlocked ? (
+        <div className="flex h-[70dvh] flex-col items-center justify-center px-6 text-center">
+          <ChefHat size={56} className="mb-4 text-violet-400" />
+          <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-wider text-violet-400">
+            Plan Profesional
+          </p>
+          <p className="text-lg font-semibold text-neutral-200">
+            La pantalla de cocina no está en tu plan
+          </p>
+          <p className="mt-1 max-w-sm text-sm text-neutral-500">
+            Mejora al plan Profesional para ver las comandas en tiempo real. Un
+            administrador puede hacerlo desde el panel, en Suscripción.
+          </p>
+          <a
+            href="/dashboard/billing"
+            className="mt-6 rounded-xl bg-violet-500 px-6 py-3 text-sm font-semibold text-white no-underline hover:bg-violet-600"
+          >
+            Ver planes
+          </a>
+        </div>
+      ) : loading ? (
         <div className="flex h-[60dvh] items-center justify-center text-neutral-500">
           Cargando cocina…
         </div>

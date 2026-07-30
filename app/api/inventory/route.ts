@@ -4,10 +4,14 @@ import { headers } from 'next/headers';
 import InventoryItem from '@/models/InventoryItem';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { requireFeature } from '@/lib/feature-gate';
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.businessId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const businessId = new mongoose.Types.ObjectId(session.user.businessId);
@@ -24,6 +28,9 @@ export async function POST(req: Request) {
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const { name, unit, quantity, lowStockThreshold, category, notes } = await req.json();

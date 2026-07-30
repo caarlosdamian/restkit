@@ -5,6 +5,7 @@ import InventoryMovement from '@/models/InventoryMovement';
 import { inventoryService } from '@/services/inventory.service';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { requireFeature } from '@/lib/feature-gate';
 
 type Params = Promise<{ itemId: string }>;
 
@@ -13,6 +14,9 @@ export async function GET(_req: Request, { params }: { params: Params }) {
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const { itemId } = await params;
@@ -36,6 +40,9 @@ export async function POST(req: Request, { params }: { params: Params }) {
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const { itemId } = await params;

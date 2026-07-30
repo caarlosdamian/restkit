@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { BarChart3, Users } from "lucide-react";
 import { analyticsService, type ReportPeriod } from "@/services/analytics.service";
+import { businessAllows } from "@/lib/feature-gate";
+import ProFeatureWall from "@/components/billing/ProFeatureWall";
 
 const PERIODS: Array<{ key: ReportPeriod; label: string }> = [
   { key: "today", label: "Hoy" },
@@ -19,6 +21,16 @@ export default async function ReportsPage({
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) redirect("/login");
   if (!["OWNER", "ADMIN"].includes(session.user.role as string)) redirect("/pos");
+
+  // Tier gate: advanced reports are a Profesional feature.
+  if (!(await businessAllows(session.user.businessId, "reports"))) {
+    return (
+      <ProFeatureWall
+        featureName="Reportes"
+        description="Ventas por mesero, propinas y comisiones con filtros por periodo. Disponible en el plan Profesional."
+      />
+    );
+  }
 
   const sp = await searchParams;
   const period = (["today", "week", "month"].includes(sp.period || "")

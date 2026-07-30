@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { LogoutButton } from "@/components/dashboard/LogoutButton";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
-import { evaluateSubscription } from "@/lib/subscription";
+import { evaluateSubscription, featureAllowed } from "@/lib/subscription";
+import type { ISubscription } from "@/models/Business";
 import UpgradeWall from "@/components/billing/UpgradeWall";
 import TrialBanner from "@/components/billing/TrialBanner";
 import {
@@ -33,11 +34,18 @@ export default async function DashboardLayout({
   // business can pay), everything else is blocked once the trial/subscription
   // lapses. Missing subscription data is grandfathered — see lib/subscription.
   let sub = { active: true, trialing: false, trialDaysLeft: 0, needsUpgrade: false, subscribed: false, status: "none" } as ReturnType<typeof evaluateSubscription>;
+  let subscription: ISubscription | undefined;
   if (session.user.businessId) {
     await dbConnect();
     const business = await Business.findById(session.user.businessId).select("subscription");
-    sub = evaluateSubscription(business?.subscription);
+    subscription = business?.subscription ?? undefined;
+    sub = evaluateSubscription(subscription);
   }
+  // Tier flags — pro-only features get a "PRO" badge in the nav when the
+  // current plan doesn't include them (the pages themselves show the upsell).
+  const hasInventory = featureAllowed(subscription, "inventory");
+  const hasReports = featureAllowed(subscription, "reports");
+  const hasKds = featureAllowed(subscription, "kds");
   const pathname = hdrs.get("x-pathname") || "";
   const onBillingPage = pathname.startsWith("/dashboard/billing");
   const gated = sub.needsUpgrade && !onBillingPage;
@@ -85,6 +93,7 @@ export default async function DashboardLayout({
           >
             <ChefHat size={17} className="shrink-0" />
             Cocina (KDS)
+            {!hasKds && <ProBadge />}
             <ExternalLink size={13} className="ml-auto text-amber-400" />
           </a>
 
@@ -102,10 +111,10 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard/orders" icon={ClipboardList} label="Historial" />
           )}
           {canSeeAnalytics && (
-            <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" />
+            <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" pro={!hasReports} />
           )}
           {canSeeAnalytics && (
-            <NavLink href="/dashboard/inventory" icon={Package} label="Inventario" />
+            <NavLink href="/dashboard/inventory" icon={Package} label="Inventario" pro={!hasInventory} />
           )}
 
           {/* Owner only */}
@@ -175,10 +184,14 @@ function NavLink({
   href,
   icon: Icon,
   label,
+  pro = false,
 }: {
   href: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
+  /** Feature not in the current plan — show a PRO badge (link still works;
+   *  the page renders the upgrade pitch). */
+  pro?: boolean;
 }) {
   return (
     <Link
@@ -187,7 +200,16 @@ function NavLink({
     >
       <Icon size={17} className="shrink-0" />
       {label}
+      {pro && <ProBadge />}
     </Link>
+  );
+}
+
+function ProBadge() {
+  return (
+    <span className="ml-auto text-[0.55rem] font-bold bg-violet-50 text-violet-500 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+      Pro
+    </span>
   );
 }
 

@@ -8,11 +8,17 @@ import { spawn } from 'node:child_process';
 
 const PORT = process.env.E2E_PORT || '3100';
 
+// E2E_PROD=1 serves the existing production build (`next start`) instead of
+// `next dev`. Dev mode compiles each page on first visit, which on a loaded
+// machine can blow test timeouts; prod mode needs a prior `npm run build` but
+// serves precompiled pages and is immune to that flake.
+const mode = process.env.E2E_PROD === '1' ? 'start' : 'dev';
+
 const mongo = await MongoMemoryServer.create();
 const uri = mongo.getUri('restkit-e2e');
-console.log(`[e2e] in-memory MongoDB at ${uri}`);
+console.log(`[e2e] in-memory MongoDB at ${uri} (next ${mode})`);
 
-const next = spawn('npx', ['next', 'dev', '-p', PORT], {
+const next = spawn('npx', ['next', mode, '-p', PORT], {
   stdio: 'inherit',
   env: {
     ...process.env,
@@ -21,6 +27,9 @@ const next = spawn('npx', ['next', 'dev', '-p', PORT], {
     BETTER_AUTH_SECRET: 'restkit-e2e-secret-0123456789-abcdefghijklmn',
     BETTER_AUTH_URL: `http://localhost:${PORT}`,
     POS_TOKEN_SECRET: 'restkit-e2e-pos-secret',
+    // Prod builds enable better-auth's per-IP rate limit; the suite's rapid
+    // logins from localhost would trip it (see lib/auth.ts).
+    AUTH_DISABLE_RATE_LIMIT: '1',
     NEXT_PUBLIC_APP_URL: `http://localhost:${PORT}`,
     APP_URL: `http://localhost:${PORT}`,
   },

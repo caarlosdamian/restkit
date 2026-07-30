@@ -93,6 +93,24 @@ export function getPlan(id: string | null | undefined): Plan | undefined {
   return PLANS.find((p) => p.id === id);
 }
 
+/**
+ * Gateable features — the tier differentiators that exist in the product
+ * today. The marketing `features` strings above are display-only; THIS is
+ * what's actually enforced. Add an id here + a `planAllows` rule when a new
+ * pro-only capability ships.
+ */
+export type FeatureId = 'inventory' | 'kds' | 'reports';
+
+/** Features NOT included in the Básico plan (Profesional and up only). */
+const PRO_ONLY: ReadonlySet<FeatureId> = new Set(['inventory', 'kds', 'reports']);
+
+/** Whether a given plan tier includes a feature. Pure — no subscription state
+ *  here; trial/grandfathering semantics live in lib/subscription.ts. */
+export function planAllows(plan: PlanId, feature: FeatureId): boolean {
+  if (plan === 'basic') return !PRO_ONLY.has(feature);
+  return true; // pro & enterprise include everything gateable today
+}
+
 /** Per-month price for a plan+period, or null for quote-only plans. */
 export function priceFor(plan: Plan, period: BillingPeriod): number | null {
   return period === 'annual' ? plan.annual : plan.monthly;

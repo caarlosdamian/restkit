@@ -20,6 +20,13 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true
     },
+    // better-auth rate-limits by IP in production builds (good — keep it).
+    // The E2E suite runs a production build on localhost and fires many auth
+    // calls in seconds from one IP, so its server sets this flag to opt out.
+    // Never set it in a real deployment.
+    ...(process.env.AUTH_DISABLE_RATE_LIMIT === "1"
+        ? { rateLimit: { enabled: false } }
+        : {}),
     user: {
         additionalFields: {
             role: {

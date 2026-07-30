@@ -1,23 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { authClient } from '@/lib/auth-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Store, Mail, Lock, User, UserPlus } from 'lucide-react';
 import { getPlan, TRIAL_DAYS } from '@/lib/plans';
 
-export default function RegistroPage() {
+function RegistroForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const sp =
-    typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search)
-      : null;
-  const plan = sp?.get('plan') ?? null;
-  const period = sp?.get('period') ?? null;
+  // useSearchParams (not window.location): it's reactive and correct during
+  // client-side navigations, where reading window.location at render time can
+  // race the URL update and silently drop the ?plan= the visitor clicked on
+  // the pricing section.
+  const sp = useSearchParams();
+  const plan = sp.get('plan');
+  const period = sp.get('period');
   const router = useRouter();
-
 
   const selectedPlan = getPlan(plan);
 
@@ -240,5 +240,14 @@ export default function RegistroPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+// useSearchParams requires a Suspense boundary for static prerendering.
+export default function RegistroPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegistroForm />
+    </Suspense>
   );
 }

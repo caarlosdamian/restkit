@@ -3,6 +3,7 @@ import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext } from '@/lib/pos-auth';
+import { requireFeature } from '@/lib/feature-gate';
 
 type Params = Promise<{ orderId: string }>;
 
@@ -15,6 +16,9 @@ type Params = Promise<{ orderId: string }>;
 export async function PATCH(req: Request, { params }: { params: Params }) {
   const ctx = await getBusinessContext();
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const denied = await requireFeature(ctx.businessId, 'kds');
+  if (denied) return denied;
 
   await dbConnect();
   const { orderId } = await params;

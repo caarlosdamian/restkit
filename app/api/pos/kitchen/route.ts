@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
 import { getBusinessContext } from '@/lib/pos-auth';
+import { requireFeature } from '@/lib/feature-gate';
 
 // Kitchen Display System feed: every ticket currently being cooked, oldest
 // first (FIFO). Terminal-session scoped — businessId comes from the cookie.
 export async function GET() {
   const ctx = await getBusinessContext();
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const denied = await requireFeature(ctx.businessId, 'kds');
+  if (denied) return denied;
 
   await dbConnect();
 

@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import InventoryItem from '@/models/InventoryItem';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { requireFeature } from '@/lib/feature-gate';
 
 type Params = Promise<{ itemId: string }>;
 
@@ -16,6 +17,9 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const { itemId } = await params;
@@ -42,6 +46,9 @@ export async function DELETE(_req: Request, { params }: { params: Params }) {
   if (!session?.user?.businessId || !['OWNER', 'ADMIN'].includes(session.user.role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  const denied = await requireFeature(session.user.businessId, 'inventory');
+  if (denied) return denied;
 
   await dbConnect();
   const { itemId } = await params;

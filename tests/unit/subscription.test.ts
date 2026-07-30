@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateSubscription } from '@/lib/subscription';
+import { evaluateSubscription, featureAllowed } from '@/lib/subscription';
 import type { ISubscription } from '@/models/Business';
 
 const NOW = new Date('2026-07-12T12:00:00Z');
@@ -130,5 +130,61 @@ describe('evaluateSubscription', () => {
       );
       expect(v.trialDaysLeft).toBe(3);
     });
+  });
+});
+
+describe('featureAllowed (tier gate)', () => {
+  // Purchased = both Stripe ids present, so these fixtures are unambiguous
+  // regardless of which id `subscribed` keys off.
+  const purchased = (plan: 'basic' | 'pro') =>
+    ({
+      plan,
+      status: 'active',
+      stripeCustomerId: 'cus_1',
+      stripeSubscriptionId: 'sub_1',
+      currentPeriodEnd: inDays(20),
+    }) as ISubscription;
+
+  it('grandfathered (no subscription) gets every feature', () => {
+    expect(featureAllowed(undefined, 'inventory', NOW)).toBe(true);
+    expect(featureAllowed(null, 'kds', NOW)).toBe(true);
+  });
+
+  it('bare free trial (no Stripe ids) gets every feature — tier bites only when paying', () => {
+    const trial = { plan: 'basic', status: 'trialing', trialEndsAt: inDays(10) } as ISubscription;
+    expect(featureAllowed(trial, 'inventory', NOW)).toBe(true);
+    expect(featureAllowed(trial, 'kds', NOW)).toBe(true);
+    expect(featureAllowed(trial, 'reports', NOW)).toBe(true);
+  });
+
+  it('purchased basic loses pro-only features', () => {
+    expect(featureAllowed(purchased('basic'), 'inventory', NOW)).toBe(false);
+    expect(featureAllowed(purchased('basic'), 'kds', NOW)).toBe(false);
+    expect(featureAllowed(purchased('basic'), 'reports', NOW)).toBe(false);
+  });
+
+  it('purchased pro keeps everything', () => {
+    expect(featureAllowed(purchased('pro'), 'inventory', NOW)).toBe(true);
+    expect(featureAllowed(purchased('pro'), 'kds', NOW)).toBe(true);
+  });
+
+  it('purchased basic still in Stripe trial is already tier-gated', () => {
+    const sub = {
+      plan: 'basic',
+      status: 'trialing',
+      trialEndsAt: inDays(10),
+      stripeCustomerId: 'cus_1',
+      stripeSubscriptionId: 'sub_1',
+    } as ISubscription;
+    expect(featureAllowed(sub, 'inventory', NOW)).toBe(false);
+  });
+
+  it('purchased sub with no recorded plan is never wrongly locked out', () => {
+    const sub = {
+      status: 'active',
+      stripeCustomerId: 'cus_1',
+      stripeSubscriptionId: 'sub_1',
+    } as ISubscription;
+    expect(featureAllowed(sub, 'inventory', NOW)).toBe(true);
   });
 });
