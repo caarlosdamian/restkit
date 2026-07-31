@@ -33,6 +33,8 @@ export default async function SettingsPage() {
           settings: {
             requiredVisits: business.settings?.requiredVisits ?? 10,
             rewardDescription: business.settings?.rewardDescription ?? "",
+            unitSingular: business.settings?.unitSingular ?? "visita",
+            unitPlural: business.settings?.unitPlural ?? "visitas",
           },
           ticket: {
             fiscalName:    business.ticket?.fiscalName,

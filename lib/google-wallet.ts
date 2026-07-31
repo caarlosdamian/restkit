@@ -1,4 +1,5 @@
 import { createSign } from 'crypto';
+import { capitalize, unitPlural } from './loyalty-labels';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
 
@@ -100,7 +101,7 @@ function buildObject(
     accountId: customerId,
     accountName: customer.name,
     loyaltyPoints: {
-      label: 'Visitas',
+      label: capitalize(unitPlural(business)),
       balance: { string: `${current} / ${required}` },
     },
     secondaryLoyaltyPoints: {
@@ -179,7 +180,7 @@ export async function updateGoogleWalletObject(
       },
       body: JSON.stringify({
         loyaltyPoints: {
-          label: 'Visitas',
+          label: capitalize(unitPlural(business)),
           balance: { string: `${current} / ${required}` },
         },
         secondaryLoyaltyPoints: {

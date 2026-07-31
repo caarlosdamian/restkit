@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { analyticsService } from "@/services/analytics.service";
+import { capitalize, unitPlural, unitSingular } from "@/lib/loyalty-labels";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
 import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight, Check } from "lucide-react";
@@ -33,6 +34,8 @@ export default async function DashboardPage() {
 
   const stats = await analyticsService.getDashboardStats(businessId);
   const maxChart = Math.max(...stats.chartData.map((d) => d.count), 1);
+  const plural = business ? unitPlural(business) : "visitas";
+  const singular = business ? unitSingular(business) : "visita";
 
   return (
     <div className="space-y-6">
@@ -65,7 +68,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           icon={<ScanLine size={20} />}
-          label="Visitas Hoy"
+          label={`${capitalize(plural)} Hoy`}
           value={stats.visitsToday}
         />
         <StatCard
@@ -85,11 +88,11 @@ export default async function DashboardPage() {
         {/* Bar chart */}
         <div className="lg:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-6">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-6">
-            Visitas — últimos 7 días
+            {capitalize(plural)} — últimos 7 días
           </p>
           {stats.visitsThisWeek === 0 ? (
             <div className="h-32 flex items-center justify-center text-sm text-gray-400">
-              Sin visitas esta semana todavía.
+              Sin {plural} esta semana todavía.
             </div>
           ) : (
             <div className="flex items-end gap-2 h-32">
@@ -129,7 +132,7 @@ export default async function DashboardPage() {
                     <p className="text-xs font-semibold text-gray-800 truncate">{v.customerName}</p>
                     <p className="flex items-center gap-1 text-[0.65rem] text-gray-400">
                       {v.type === "REWARD_REDEMPTION" ? <Gift size={11} /> : <Check size={11} />}
-                      {v.type === "REWARD_REDEMPTION" ? "Premio canjeado" : "Visita"}
+                      {v.type === "REWARD_REDEMPTION" ? "Premio canjeado" : capitalize(singular)}
                       {" · "}
                       {v.timeAgo}
                     </p>
@@ -174,7 +177,7 @@ export default async function DashboardPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-bold text-gray-900">{c.totalVisits}</p>
-                  <p className="text-[0.65rem] text-gray-400">visitas</p>
+                  <p className="text-[0.65rem] text-gray-400">{plural}</p>
                 </div>
                 <ChevronRight size={14} className="text-gray-200 group-hover:text-emerald-500 transition-colors shrink-0" />
               </Link>

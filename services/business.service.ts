@@ -45,6 +45,8 @@ export const businessService = {
         settings: {
           requiredVisits: 10,
           rewardDescription: "¡Un café gratis!",
+          unitSingular: "visita",
+          unitPlural: "visitas",
         },
         ticket: {
           fiscalName: data.businessName,

@@ -7,7 +7,12 @@ import { printReceipt } from "@/lib/receipt-html";
 interface BusinessData {
   name: string;
   branding: { primaryColor: string; logo?: string };
-  settings: { requiredVisits: number; rewardDescription: string };
+  settings: {
+    requiredVisits: number;
+    rewardDescription: string;
+    unitSingular: string;
+    unitPlural: string;
+  };
   ticket: {
     fiscalName?: string;
     rfc?: string;
@@ -207,7 +212,25 @@ export default function SettingsForm({ initial }: { initial: BusinessData }) {
       {/* ── Fidelización ── */}
       <Section title="Programa de fidelización" desc="Configura las reglas de tu tarjeta de lealtad.">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Visitas para premio">
+          <Field label="Unidad (singular)" hint='Ej. "visita", "compra", "sello"'>
+            <input
+              value={data.settings.unitSingular}
+              onChange={(e) => setField("settings.unitSingular", e.target.value)}
+              placeholder="visita"
+              className={inputCls}
+            />
+          </Field>
+          <Field label="Unidad (plural)" hint='Ej. "visitas", "compras", "sellos"'>
+            <input
+              value={data.settings.unitPlural}
+              onChange={(e) => setField("settings.unitPlural", e.target.value)}
+              placeholder="visitas"
+              className={inputCls}
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label={`${data.settings.unitPlural || "Visitas"} para premio`}>
             <input
               type="number"
               min={1}

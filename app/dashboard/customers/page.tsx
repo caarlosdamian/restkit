@@ -1,6 +1,8 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { customerService } from "@/services/customer.service";
+import { businessRepository } from "@/repositories/business.repository";
+import { unitPlural } from "@/lib/loyalty-labels";
 import CustomersFilterBar from "@/components/filters/CustomersFilterBar";
 import Link from "next/link";
 import { Users, UserPlus } from "lucide-react";
@@ -24,7 +26,12 @@ export default async function CustomersPage({
   const search = (sp.search || "").toLowerCase();
   const rewardFilter = (sp.reward || "all") as RewardFilter;
 
-  let customers = await customerService.getAllCustomers(session.user.businessId);
+  const [customersAll, business] = await Promise.all([
+    customerService.getAllCustomers(session.user.businessId),
+    businessRepository.findById(session.user.businessId),
+  ]);
+  let customers = customersAll;
+  const plural = business ? unitPlural(business) : "visitas";
 
   // Apply filters
   if (search) {
@@ -110,7 +117,7 @@ export default async function CustomersPage({
                     {/* Visits progress */}
                     <div className="hidden sm:flex flex-col items-end gap-1 w-32 shrink-0">
                       <span className="text-xs text-gray-500 font-medium">
-                        {customer.stats.currentVisits} visitas
+                        {customer.stats.currentVisits} {plural}
                       </span>
                       <div className="w-full h-1.5 rounded-full bg-gray-100">
                         <div

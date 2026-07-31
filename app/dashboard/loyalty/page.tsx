@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import dbConnect from "@/lib/db";
 import { analyticsService } from "@/services/analytics.service";
 import { businessRepository } from "@/repositories/business.repository";
+import { capitalize, unitPlural } from "@/lib/loyalty-labels";
 import Link from "next/link";
 import { Gift, Users, ScanLine, ChevronRight } from "lucide-react";
 
@@ -24,6 +25,8 @@ export default async function LoyaltyPage() {
     stats.visitsThisWeek > 0
       ? Math.round((stats.rewardsDelivered / stats.visitsThisWeek) * 100)
       : 0;
+
+  const plural = business ? unitPlural(business) : "visitas";
 
   return (
     <div className="space-y-6">
@@ -60,7 +63,7 @@ export default async function LoyaltyPage() {
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
               <ScanLine size={18} />
             </div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Visitas esta semana</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{capitalize(plural)} esta semana</p>
           </div>
           <p className="text-4xl font-extrabold tracking-tight text-gray-900">{stats.visitsThisWeek}</p>
         </div>
@@ -77,7 +80,7 @@ export default async function LoyaltyPage() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">
-              <p className="text-xs text-gray-400 mb-1">Visitas para premio</p>
+              <p className="text-xs text-gray-400 mb-1">{capitalize(plural)} para premio</p>
               <p className="text-2xl font-extrabold text-gray-900">{business.settings.requiredVisits}</p>
             </div>
             <div className="rounded-xl bg-gray-50 border border-gray-100 p-4">

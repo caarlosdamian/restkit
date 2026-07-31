@@ -40,6 +40,9 @@ export interface IBusiness extends Document {
   settings: {
     requiredVisits: number;
     rewardDescription: string;
+    /** What a single unit of progress is called, e.g. "visita", "compra", "sello". */
+    unitSingular: string;
+    unitPlural: string;
   };
   ticket: ITicketConfig;
   subscription: ISubscription;
@@ -58,6 +61,8 @@ const BusinessSchema: Schema = new Schema(
     settings: {
       requiredVisits: { type: Number, default: 10 },
       rewardDescription: { type: String, required: true },
+      unitSingular: { type: String, default: 'visita' },
+      unitPlural: { type: String, default: 'visitas' },
     },
     ticket: {
       fiscalName:    { type: String },

@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import dbConnect from '@/lib/db';
 import { customerService } from '@/services/customer.service';
 import { businessRepository } from '@/repositories/business.repository';
+import { capitalize, unitSingular, unitPlural } from '@/lib/loyalty-labels';
 import RecordVisitButton from '@/components/dashboard/RecordVisitButton';
 import { AppleWallet } from '@/components/appleWallet/AppleWallet';
 import GoogleWallet from '@/components/dashboard/GoogleWallet';
@@ -34,6 +35,8 @@ export default async function CustomerDetailPage({
   const required = business.settings.requiredVisits;
   const current = customer.stats.currentVisits;
   const progressPct = Math.min((current / required) * 100, 100);
+  const singular = unitSingular(business);
+  const plural = unitPlural(business);
 
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
   const publicUrl = `${appUrl}/c/${customerId}`;
@@ -63,7 +66,7 @@ export default async function CustomerDetailPage({
               </p>
             </div>
           </div>
-          <RecordVisitButton customerId={customerId} />
+          <RecordVisitButton customerId={customerId} unitSingular={singular} unitPlural={plural} />
         </div>
       </div>
 
@@ -74,7 +77,7 @@ export default async function CustomerDetailPage({
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
               <ScanLine size={18} />
             </div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total visitas</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Total {plural}</p>
           </div>
           <p className="text-4xl font-extrabold tracking-tight text-gray-900">{customer.stats.totalVisits}</p>
         </div>
@@ -94,7 +97,7 @@ export default async function CustomerDetailPage({
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Progreso de fidelidad</p>
         <div className="flex items-end gap-3">
           <span className="text-5xl font-extrabold tracking-tight text-gray-900">{current}</span>
-          <span className="mb-1.5 text-lg text-gray-400 font-medium">/ {required} visitas</span>
+          <span className="mb-1.5 text-lg text-gray-400 font-medium">/ {required} {plural}</span>
         </div>
         <div className="mt-4 h-2.5 w-full rounded-full bg-gray-100">
           <div

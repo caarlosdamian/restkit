@@ -4,10 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScanLine } from "lucide-react";
 
-export default function RecordVisitButton({ customerId }: { customerId: string }) {
+export default function RecordVisitButton({
+  customerId,
+  unitSingular = "visita",
+  unitPlural = "visitas",
+}: {
+  customerId: string;
+  unitSingular?: string;
+  unitPlural?: string;
+}) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
   const router = useRouter();
+  const label = unitSingular.charAt(0).toUpperCase() + unitSingular.slice(1);
 
   async function handleClick() {
     setLoading(true);
@@ -19,12 +28,14 @@ export default function RecordVisitButton({ customerId }: { customerId: string }
         body: JSON.stringify({ customerId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al registrar visita");
+      if (!res.ok) throw new Error(data.error || `Error al registrar ${unitSingular}`);
 
       setMessage({
         text: data.earnedReward
           ? "¡Premio ganado! Reiniciando contador."
-          : `Visita ${data.currentVisits} registrada.`,
+          // Avoids a gendered participle ("registrada"/"registrado") since the
+          // unit noun is business-configurable and its gender isn't known.
+          : `Registro guardado — llevas ${data.currentVisits} ${unitPlural}.`,
         type: "success",
       });
       router.refresh();
@@ -43,7 +54,7 @@ export default function RecordVisitButton({ customerId }: { customerId: string }
         className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 disabled:opacity-50 transition-colors"
       >
         <ScanLine size={16} />
-        {loading ? "Registrando..." : "Registrar Visita"}
+        {loading ? "Registrando..." : `Registrar ${label}`}
       </button>
       {message && (
         <p className={`text-xs font-medium ${message.type === "success" ? "text-emerald-600" : "text-red-500"}`}>

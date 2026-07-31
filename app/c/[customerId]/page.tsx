@@ -1,5 +1,6 @@
 import Customer from '@/models/Customer';
 import { businessRepository } from '@/repositories/business.repository';
+import { unitPlural } from '@/lib/loyalty-labels';
 import dbConnect from '@/lib/db';
 import { notFound } from 'next/navigation';
 
@@ -25,6 +26,7 @@ export default async function CustomerPassPage({
   const required = business.settings.requiredVisits;
   const pct = Math.min((current / required) * 100, 100);
   const primaryColor = business.branding?.primaryColor || '#4f46e5';
+  const plural = unitPlural(business);
 
   const googleUrl = `/api/passes/google/${customerId}`;
   const appleUrl = `/api/passes/apple/${customerId}`;
@@ -43,7 +45,7 @@ export default async function CustomerPassPage({
           <div className="mt-6">
             <div className="flex items-end justify-between">
               <span className="text-4xl font-bold">{current}</span>
-              <span className="mb-1 text-lg opacity-75">/ {required} visitas</span>
+              <span className="mb-1 text-lg opacity-75">/ {required} {plural}</span>
             </div>
             <div className="mt-2 h-2.5 w-full rounded-full bg-white/30">
               <div

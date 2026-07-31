@@ -1,6 +1,7 @@
 import { PKPass } from 'passkit-generator';
 import sharp from 'sharp';
 import { solidColorPNG } from './png';
+import { unitPlural } from './loyalty-labels';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
 
@@ -92,9 +93,11 @@ export async function generateApplePass(
       primaryFields: [
         {
           key: 'visits',
-          label: 'VISITAS',
+          label: unitPlural(business).toUpperCase(),
           value: `${currentVisits} de ${required}`,
-          changeMessage: 'Nueva visita registrada. Ahora tienes %@ visitas.',
+          // Avoids gendered participles ("nueva"/"nuevo") since the unit noun is
+          // business-configurable and its grammatical gender isn't known.
+          changeMessage: `Registro actualizado. Ahora tienes %@ ${unitPlural(business)}.`,
         },
       ],
       secondaryFields: [
@@ -114,7 +117,7 @@ export async function generateApplePass(
       backFields: [
         {
           key: 'totalVisits',
-          label: 'Total de visitas',
+          label: `Total de ${unitPlural(business)}`,
           value: String(totalVisits),
         },
         {
