@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: 'Business not found' }, { status: 404 });
     }
 
-    const passBuffer = generateApplePass(customer, business);
+    const passBuffer = await generateApplePass(customer, business);
 
     return new Response(passBuffer as unknown as BodyInit, {
       headers: {

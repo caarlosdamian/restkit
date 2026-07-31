@@ -44,9 +44,11 @@ export const visitService = {
     const updatedCustomer = await customerRepository.findById(customerId, businessId);
 
     // Fire-and-forget wallet updates — non-critical
-    if (updatedCustomer?.externalIds?.applePassId) {
+    // AppleDevice.serialNumber is the customer's own _id (see lib/apple-pass.ts's
+    // pass.json serialNumber + the device registration route), not externalIds.applePassId.
+    if (updatedCustomer) {
       appleDeviceRepository
-        .findBySerialNumber(updatedCustomer.externalIds.applePassId)
+        .findBySerialNumber(customerId)
         .then((devices) =>
           Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken)))
         )

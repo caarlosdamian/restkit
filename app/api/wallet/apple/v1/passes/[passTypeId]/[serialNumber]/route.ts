@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Params }) {
   if (!business) return new Response(null, { status: 404 });
 
   try {
-    const passBuffer = generateApplePass(customer, business);
+    const passBuffer = await generateApplePass(customer, business);
     return new Response(passBuffer as unknown as BodyInit, {
       headers: {
         'Content-Type': 'application/vnd.apple.pkpass',

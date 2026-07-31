@@ -1,7 +1,30 @@
 import { PKPass } from 'passkit-generator';
+import sharp from 'sharp';
 import { solidColorPNG } from './png';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
+
+// Apple's design guide caps the logo at 160x50pt (1x); @2x/@3x are the same
+// box scaled up. `fit: 'inside'` preserves aspect ratio without cropping.
+async function fetchLogoVariants(
+  logoUrl: string
+): Promise<{ '1x': Buffer; '2x': Buffer; '3x': Buffer } | null> {
+  try {
+    const res = await fetch(logoUrl);
+    if (!res.ok) return null;
+    const input = Buffer.from(await res.arrayBuffer());
+    const scaled = (scale: number) =>
+      sharp(input)
+        .resize({ width: 160 * scale, height: 50 * scale, fit: 'inside' })
+        .png()
+        .toBuffer();
+    const [x1, x2, x3] = await Promise.all([scaled(1), scaled(2), scaled(3)]);
+    return { '1x': x1, '2x': x2, '3x': x3 };
+  } catch (err) {
+    console.error('Apple pass logo fetch/convert failed:', err);
+    return null;
+  }
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '').padEnd(6, '0');
@@ -16,10 +39,10 @@ function cssRgb(r: number, g: number, b: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-export function generateApplePass(
+export async function generateApplePass(
   customer: ICustomer,
   business: IBusiness
-): Buffer {
+): Promise<Buffer> {
   const passTypeId = process.env.APPLE_PASS_TYPE_IDENTIFIER;
   const teamId = process.env.APPLE_TEAM_ID;
   const wwdrB64 = process.env.APPLE_WWDR_CERT_BASE64;
@@ -46,6 +69,10 @@ export function generateApplePass(
   const { totalVisits, currentVisits } = customer.stats;
   const required = business.settings.requiredVisits;
 
+  const logoVariants = business.branding?.logo
+    ? await fetchLogoVariants(business.branding.logo)
+    : null;
+
   const passJson = {
     formatVersion: 1,
     passTypeIdentifier: passTypeId,
@@ -53,7 +80,9 @@ export function generateApplePass(
     organizationName: business.name,
     serialNumber,
     description: `Tarjeta de fidelidad — ${business.name}`,
-    logoText: business.name,
+    // Only fall back to a text wordmark when there's no real logo image —
+    // Wallet renders logoText next to logo.png, so showing both is redundant.
+    ...(logoVariants ? {} : { logoText: business.name }),
     backgroundColor: cssRgb(r, g, b),
     foregroundColor: fg,
     labelColor: label,
@@ -109,13 +138,21 @@ export function generateApplePass(
   const icon2x = solidColorPNG(58, 58, r, g, b);
   const icon3x = solidColorPNG(87, 87, r, g, b);
 
+  const files: Record<string, Buffer> = {
+    'pass.json': Buffer.from(JSON.stringify(passJson)),
+    'icon.png': icon,
+    'icon@2x.png': icon2x,
+    'icon@3x.png': icon3x,
+  };
+
+  if (logoVariants) {
+    files['logo.png'] = logoVariants['1x'];
+    files['logo@2x.png'] = logoVariants['2x'];
+    files['logo@3x.png'] = logoVariants['3x'];
+  }
+
   const pass = new PKPass(
-    {
-      'pass.json': Buffer.from(JSON.stringify(passJson)),
-      'icon.png': icon,
-      'icon@2x.png': icon2x,
-      'icon@3x.png': icon3x,
-    },
+    files,
     {
       wwdr: Buffer.from(wwdrB64, 'base64'),
       signerCert: Buffer.from(certB64, 'base64'),

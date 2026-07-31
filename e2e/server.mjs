@@ -25,7 +25,7 @@ const next = spawn('npx', ['next', mode, '-p', PORT], {
     MONGODB_URI: uri,
     // 32+ chars keeps better-auth from warning on every request.
     BETTER_AUTH_SECRET: 'restkit-e2e-secret-0123456789-abcdefghijklmn',
-    BETTER_AUTH_URL: `http://localhost:${PORT}`,
+    // BETTER_AUTH_URL: `http://localhost:${PORT}`,
     POS_TOKEN_SECRET: 'restkit-e2e-pos-secret',
     // Prod builds enable better-auth's per-IP rate limit; the suite's rapid
     // logins from localhost would trip it (see lib/auth.ts).
