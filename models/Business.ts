@@ -11,7 +11,7 @@ export interface ITicketConfig {
   iva?: number;          // IVA rate %, prices already include it. 0 disables.
 }
 
-export type PlanId = 'basic' | 'pro' | 'enterprise';
+export type PlanId = 'lite' | 'basic' | 'pro';
 export type BillingPeriod = 'monthly' | 'annual';
 /** trialing = in the free trial (no card). active = paid. past_due/canceled =
  *  needs to (re)subscribe. Missing/undefined on legacy docs = grandfathered
@@ -75,7 +75,7 @@ const BusinessSchema: Schema = new Schema(
       iva:           { type: Number, default: 16 },
     },
     subscription: {
-      plan:                 { type: String, enum: ['basic', 'pro', 'enterprise'] },
+      plan:                 { type: String, enum: ['lite', 'basic', 'pro'] },
       billingPeriod:        { type: String, enum: ['monthly', 'annual'] },
       status:               { type: String, enum: ['trialing', 'active', 'past_due', 'canceled'] },
       trialEndsAt:          { type: Date },

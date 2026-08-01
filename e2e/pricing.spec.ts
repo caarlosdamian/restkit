@@ -25,10 +25,14 @@ test.describe('Landing pricing', () => {
     await expect(page.getByText(/prueba gratis, sin tarjeta/)).toBeVisible();
   });
 
-  test('enterprise plan contacts sales instead of signing up', async ({ page }) => {
+  test('lite plan CTA carries the plan into signup like every other plan', async ({ page }) => {
     await page.goto('/#precios');
-    const salesLink = page.locator('a[href^="mailto:"]').first();
-    await expect(salesLink).toBeVisible();
-    await expect(salesLink).toHaveText(/Hablar con ventas/);
+
+    await page
+      .locator('a[href="/registro?plan=lite&period=monthly"]')
+      .first()
+      .click();
+    await page.waitForURL('**/registro?plan=lite&period=monthly');
+    await expect(page.getByText(/Plan Lite/)).toBeVisible();
   });
 });

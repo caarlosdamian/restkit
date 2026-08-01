@@ -6,14 +6,13 @@ import {
   PLANS,
   priceFor,
   formatMXN,
-  SALES_EMAIL,
   ANNUAL_DISCOUNT,
   type BillingPeriod,
 } from "@/lib/plans";
 
 /**
- * Plan chooser on the billing page. Each self-serve plan starts a Stripe
- * Checkout session and redirects to the hosted page. Enterprise → email sales.
+ * Plan chooser on the billing page. Each plan starts a Stripe Checkout
+ * session and redirects to the hosted page.
  */
 export default function BillingPlans({
   currentPlan,
@@ -78,9 +77,6 @@ export default function BillingPlans({
         {PLANS.map((p) => {
           const price = priceFor(p, period);
           const isCurrent = p.id === currentPlan;
-          const mailto = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(
-            "Interés en el plan Empresa de RestKit"
-          )}`;
 
           return (
             <div
@@ -96,16 +92,10 @@ export default function BillingPlans({
               )}
               <p className="text-sm font-bold text-gray-900 mb-1">{p.name}</p>
               <div className="flex items-end gap-1 mb-4 min-h-[2.75rem]">
-                {price === null ? (
-                  <span className="text-3xl font-extrabold tracking-tight text-gray-900">A medida</span>
-                ) : (
-                  <>
-                    <span className="text-3xl font-extrabold tracking-tight text-gray-900">
-                      {formatMXN(price)}
-                    </span>
-                    <span className="text-sm text-gray-400 mb-1">/mes</span>
-                  </>
-                )}
+                <span className="text-3xl font-extrabold tracking-tight text-gray-900">
+                  {formatMXN(price)}
+                </span>
+                <span className="text-sm text-gray-400 mb-1">/mes</span>
               </div>
               <ul className="space-y-2 mb-6">
                 {p.features.map((f) => (
@@ -114,14 +104,7 @@ export default function BillingPlans({
                   </li>
                 ))}
               </ul>
-              {!p.selfServe ? (
-                <a
-                  href={mailto}
-                  className="block w-full text-center rounded-xl py-2.5 text-sm font-semibold border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700 no-underline"
-                >
-                  Hablar con ventas
-                </a>
-              ) : isCurrent ? (
+              {isCurrent ? (
                 <span className="block w-full text-center rounded-xl py-2.5 text-sm font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
                   Plan actual
                 </span>

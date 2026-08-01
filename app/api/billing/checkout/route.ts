@@ -5,7 +5,7 @@ import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { requireStripe, priceIdFor } from '@/lib/stripe';
-import { toSelfServePlanId, toBillingPeriod } from '@/lib/plans';
+import { toPlanId, toBillingPeriod } from '@/lib/plans';
 
 /**
  * Starts a Stripe Checkout session (mode: subscription) for the caller's
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const plan = toSelfServePlanId(body.plan);
+  const plan = toPlanId(body.plan);
   const period = toBillingPeriod(body.period);
   if (!plan) {
     return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });

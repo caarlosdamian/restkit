@@ -41,7 +41,7 @@ async function makeBusiness(
 }
 
 /** Purchased plan: both Stripe ids present, in good standing. */
-const purchased = (plan: 'basic' | 'pro' | 'enterprise') => ({
+const purchased = (plan: 'lite' | 'basic' | 'pro') => ({
   plan,
   billingPeriod: 'monthly',
   status: 'active',
@@ -158,13 +158,13 @@ describe('tier matrix — every gated handler × every subscription state', () =
     for (const h of HANDLERS) expect(statuses[h], h).toBeLessThan(300);
   });
 
-  it('purchased Enterprise: ALL gated handlers succeed', async () => {
-    const businessId = await makeBusiness(purchased('enterprise'));
+  it('purchased Lite: ALL gated handlers 403 with the upgrade code', async () => {
+    const businessId = await makeBusiness(purchased('lite'));
     const ids = await seedResources(businessId);
     signInAs(businessId, 'OWNER');
 
     const statuses = await hitAllGatedHandlers(ids);
-    for (const h of HANDLERS) expect(statuses[h], h).toBeLessThan(300);
+    for (const h of HANDLERS) expect(statuses[h], h).toBe(403);
   });
 
   it('bare free trial (nothing purchased): ALL gated handlers succeed', async () => {
@@ -226,11 +226,25 @@ describe('tier gate boundaries — what it must NOT affect', () => {
 
     // Menu still works…
     expect((await listProducts()).status).toBe(200);
-    // …and so does opening the cash register (POS core is every plan).
+    // …and so does opening the cash register (POS starts at Básico).
     const res = await startSession(
       jsonRequest('/api/pos-session/start', { method: 'POST', body: { openingBalance: 500 } })
     );
     expect(res.status).toBe(201);
+  });
+
+  it('purchased Lite: menu still works but the register requires an upgrade', async () => {
+    const businessId = await makeBusiness(purchased('lite'));
+    signInAs(businessId, 'OWNER');
+
+    // Menu (a non-gated feature) still works…
+    expect((await listProducts()).status).toBe(200);
+    // …but Lite doesn't include POS.
+    const res = await startSession(
+      jsonRequest('/api/pos-session/start', { method: 'POST', body: { openingBalance: 500 } })
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'PLAN_UPGRADE_REQUIRED', feature: 'pos' });
   });
 
   it('expired trial: the access gate (402) still wins over tier logic', async () => {

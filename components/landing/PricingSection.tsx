@@ -7,7 +7,6 @@ import {
   PLANS,
   priceFor,
   formatMXN,
-  SALES_EMAIL,
   ANNUAL_DISCOUNT,
   type BillingPeriod,
 } from "@/lib/plans";
@@ -52,9 +51,6 @@ export default function PricingSection() {
           {PLANS.map((p) => {
             const price = priceFor(p, period);
             const href = `/registro?plan=${p.id}&period=${period}`;
-            const mailto = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(
-              "Interés en el plan Empresa de RestKit"
-            )}`;
 
             return (
               <div
@@ -70,21 +66,13 @@ export default function PricingSection() {
                 )}
                 <p className="text-sm font-bold text-gray-900 mb-1">{p.name}</p>
                 <div className="flex items-end gap-1 mb-1 min-h-[2.75rem]">
-                  {price === null ? (
-                    <span className="text-4xl font-extrabold tracking-tight text-gray-900">A medida</span>
-                  ) : (
-                    <>
-                      <span className="text-4xl font-extrabold tracking-tight text-gray-900">
-                        {formatMXN(price)}
-                      </span>
-                      <span className="text-sm text-gray-400 mb-1">/mes</span>
-                    </>
-                  )}
+                  <span className="text-4xl font-extrabold tracking-tight text-gray-900">
+                    {formatMXN(price)}
+                  </span>
+                  <span className="text-sm text-gray-400 mb-1">/mes</span>
                 </div>
                 <p className="text-xs text-gray-400 mb-6 min-h-[2rem]">
-                  {price !== null && period === "annual"
-                    ? `Facturado anual · ${p.desc}`
-                    : p.desc}
+                  {period === "annual" ? `Facturado anual · ${p.desc}` : p.desc}
                 </p>
                 <ul className="space-y-2.5 mb-8">
                   {p.features.map((f) => (
@@ -93,25 +81,16 @@ export default function PricingSection() {
                     </li>
                   ))}
                 </ul>
-                {p.selfServe ? (
-                  <Link
-                    href={href}
-                    className={`block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors no-underline ${
-                      p.highlight
-                        ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                        : "border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700"
-                    }`}
-                  >
-                    {p.cta}
-                  </Link>
-                ) : (
-                  <a
-                    href={mailto}
-                    className="block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors no-underline border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700"
-                  >
-                    {p.cta}
-                  </a>
-                )}
+                <Link
+                  href={href}
+                  className={`block w-full text-center rounded-xl py-2.5 text-sm font-semibold transition-colors no-underline ${
+                    p.highlight
+                      ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                      : "border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700"
+                  }`}
+                >
+                  {p.cta}
+                </Link>
               </div>
             );
           })}

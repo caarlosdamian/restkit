@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Pencil, X } from "lucide-react";
+
+interface CustomerData {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
+export default function EditCustomerButton({ customer }: { customer: CustomerData }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const fd = new FormData(e.currentTarget);
+    try {
+      const res = await fetch(`/api/customers/${customer.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: (fd.get("name") as string)?.trim(),
+          email: (fd.get("email") as string)?.trim() || undefined,
+          phone: (fd.get("phone") as string)?.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar");
+      setOpen(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="p-2 rounded-lg text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"
+        title="Editar cliente"
+      >
+        <Pencil size={15} />
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-7">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-extrabold text-gray-900">Editar Cliente</h2>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Nombre completo <span className="text-red-500">*</span>
+                </label>
+                <input
+                  name="name"
+                  required
+                  defaultValue={customer.name}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Correo electrónico
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  defaultValue={customer.email}
+                  placeholder="cliente@ejemplo.com"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                  Teléfono
+                </label>
+                <input
+                  name="phone"
+                  type="tel"
+                  defaultValue={customer.phone}
+                  placeholder="+52 55 1234 5678"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  {loading ? "Guardando…" : "Guardar cambios"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

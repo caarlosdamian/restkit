@@ -22,6 +22,7 @@ export async function businessAllows(
 }
 
 const FEATURE_MESSAGES: Record<FeatureId, string> = {
+  pos: 'Tu plan no incluye POS. Mejora al plan Básico para usarlo.',
   inventory: 'Tu plan no incluye inventario. Mejora al plan Profesional para usarlo.',
   kds: 'Tu plan no incluye la pantalla de cocina (KDS). Mejora al plan Profesional para usarla.',
   reports: 'Tu plan no incluye reportes avanzados. Mejora al plan Profesional para verlos.',

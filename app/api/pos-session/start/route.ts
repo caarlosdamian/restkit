@@ -5,6 +5,7 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext, isManager } from '@/lib/pos-auth';
 import { evaluateSubscription } from '@/lib/subscription';
+import { requireFeature } from '@/lib/feature-gate';
 
 export async function POST(req: Request) {
   const ctx = await getBusinessContext();
@@ -24,6 +25,10 @@ export async function POST(req: Request) {
       { status: 402 }
     );
   }
+
+  // Lite is customers + loyalty only — POS starts at Básico.
+  const denied = await requireFeature(ctx.businessId, 'pos');
+  if (denied) return denied;
 
   const { openingBalance } = await req.json();
 

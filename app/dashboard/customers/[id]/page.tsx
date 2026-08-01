@@ -5,6 +5,7 @@ import { customerService } from '@/services/customer.service';
 import { businessRepository } from '@/repositories/business.repository';
 import { capitalize, unitSingular, unitPlural } from '@/lib/loyalty-labels';
 import RecordVisitButton from '@/components/dashboard/RecordVisitButton';
+import EditCustomerButton from '@/components/dashboard/EditCustomerButton';
 import { AppleWallet } from '@/components/appleWallet/AppleWallet';
 import GoogleWallet from '@/components/dashboard/GoogleWallet';
 import Link from 'next/link';
@@ -60,7 +61,17 @@ export default async function CustomerDetailPage({
               {customer.name.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">{customer.name}</h1>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">{customer.name}</h1>
+                <EditCustomerButton
+                  customer={{
+                    id: customerId,
+                    name: customer.name,
+                    email: customer.email,
+                    phone: customer.phone,
+                  }}
+                />
+              </div>
               <p className="text-sm text-gray-500 mt-0.5">
                 {customer.email || customer.phone || 'Sin contacto'}
               </p>

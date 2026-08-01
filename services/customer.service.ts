@@ -22,5 +22,14 @@ export const customerService = {
   async getCustomerById(id: string, businessId: string) {
     await dbConnect();
     return await customerRepository.findById(id, businessId);
+  },
+
+  async updateCustomer(
+    id: string,
+    businessId: string,
+    data: { name?: string; email?: string; phone?: string }
+  ) {
+    await dbConnect();
+    return await customerRepository.update(id, businessId, data);
   }
 };

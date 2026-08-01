@@ -51,13 +51,21 @@ describe('POST /api/billing/checkout', () => {
     expect((await checkout(req({ plan: 'pro' }))).status).toBe(401); // no session
   });
 
-  it('400s for a non-self-serve or unknown plan', async () => {
+  it('400s for an unknown plan', async () => {
     const businessId = oid();
     await makeBusiness(businessId);
     signInAs(businessId, 'OWNER');
 
-    expect((await checkout(req({ plan: 'enterprise' }))).status).toBe(400);
     expect((await checkout(req({ plan: 'bogus' }))).status).toBe(400);
+  });
+
+  it('checkout works for the Lite plan too', async () => {
+    const businessId = oid();
+    await makeBusiness(businessId);
+    signInAs(businessId, 'OWNER');
+
+    const res = await checkout(req({ plan: 'lite', period: 'monthly' }));
+    expect(res.status).toBe(200);
   });
 
   it('500s when the Stripe price id is not configured', async () => {

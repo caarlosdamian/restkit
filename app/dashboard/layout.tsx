@@ -7,6 +7,7 @@ import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
 import { evaluateSubscription, featureAllowed } from "@/lib/subscription";
+import { getPlan } from "@/lib/plans";
 import type { ISubscription } from "@/models/Business";
 import UpgradeWall from "@/components/billing/UpgradeWall";
 import TrialBanner from "@/components/billing/TrialBanner";
@@ -42,11 +43,13 @@ export default async function DashboardLayout({
     subscription = business?.subscription ?? undefined;
     sub = evaluateSubscription(subscription);
   }
-  // Tier flags — pro-only features get a "PRO" badge in the nav when the
+  // Tier flags — gated features get an upgrade badge in the nav when the
   // current plan doesn't include them (the pages themselves show the upsell).
   const hasInventory = featureAllowed(subscription, "inventory");
   const hasReports = featureAllowed(subscription, "reports");
   const hasKds = featureAllowed(subscription, "kds");
+  const hasPos = featureAllowed(subscription, "pos");
+  const planName = subscription?.plan ? getPlan(subscription.plan)?.name : undefined;
   const pathname = hdrs.get("x-pathname") || "";
   const onBillingPage = pathname.startsWith("/dashboard/billing");
   const gated = sub.needsUpgrade && !onBillingPage;
@@ -80,6 +83,7 @@ export default async function DashboardLayout({
           >
             <ShoppingCart size={17} className="shrink-0" />
             Abrir POS
+            {!hasPos && <TierBadge tier="Básico" />}
             <ExternalLink size={13} className="ml-auto text-emerald-400" />
           </a>
 
@@ -92,7 +96,7 @@ export default async function DashboardLayout({
           >
             <ChefHat size={17} className="shrink-0" />
             Cocina (KDS)
-            {!hasKds && <ProBadge />}
+            {!hasKds && <TierBadge tier="Pro" />}
             <ExternalLink size={13} className="ml-auto text-amber-400" />
           </a>
 
@@ -110,10 +114,10 @@ export default async function DashboardLayout({
             <NavLink href="/dashboard/orders" icon={ClipboardList} label="Historial" />
           )}
           {canSeeAnalytics && (
-            <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" pro={!hasReports} />
+            <NavLink href="/dashboard/reports" icon={BarChart3} label="Reportes" upgradeTier={!hasReports ? "Pro" : undefined} />
           )}
           {canSeeAnalytics && (
-            <NavLink href="/dashboard/inventory" icon={Package} label="Inventario" pro={!hasInventory} />
+            <NavLink href="/dashboard/inventory" icon={Package} label="Inventario" upgradeTier={!hasInventory ? "Pro" : undefined} />
           )}
 
           {/* Owner only */}
@@ -158,6 +162,7 @@ export default async function DashboardLayout({
     <>
       <p className="text-sm font-semibold text-gray-900 truncate min-w-0">{session.user.name}</p>
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
+        {planName && <PlanBadge name={planName} trialing={sub.trialing && !sub.subscribed} />}
         <RoleBadge role={role} />
         <LogoutButton />
       </div>
@@ -182,14 +187,14 @@ function NavLink({
   href,
   icon: Icon,
   label,
-  pro = false,
+  upgradeTier,
 }: {
   href: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
-  /** Feature not in the current plan — show a PRO badge (link still works;
-   *  the page renders the upgrade pitch). */
-  pro?: boolean;
+  /** Feature not in the current plan — show which tier unlocks it (link still
+   *  works; the page renders the upgrade pitch). */
+  upgradeTier?: string;
 }) {
   return (
     <Link
@@ -198,16 +203,29 @@ function NavLink({
     >
       <Icon size={17} className="shrink-0" />
       {label}
-      {pro && <ProBadge />}
+      {upgradeTier && <TierBadge tier={upgradeTier} />}
     </Link>
   );
 }
 
-function ProBadge() {
+function TierBadge({ tier }: { tier: string }) {
   return (
     <span className="ml-auto text-[0.55rem] font-bold bg-violet-50 text-violet-500 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-      Pro
+      {tier}
     </span>
+  );
+}
+
+function PlanBadge({ name, trialing }: { name: string; trialing: boolean }) {
+  return (
+    <Link
+      href="/dashboard/billing"
+      className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors no-underline"
+      title="Ver mi plan y facturación"
+    >
+      {name}
+      {trialing && ' · Prueba'}
+    </Link>
   );
 }
 

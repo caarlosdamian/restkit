@@ -2,7 +2,7 @@ import { businessRepository } from "@/repositories/business.repository";
 import dbConnect from "@/lib/db";
 import { auth } from "@/lib/auth";
 import mongoose from "mongoose";
-import { TRIAL_DAYS, toSelfServePlanId, toBillingPeriod } from "@/lib/plans";
+import { TRIAL_DAYS, toPlanId, toBillingPeriod } from "@/lib/plans";
 
 export const businessService = {
   async registerBusinessAndOwner(data: {
@@ -19,7 +19,7 @@ export const businessService = {
     // Every new business starts a 14-day trial with no card (trial-without-card).
     // The gate only kicks in once trialEndsAt passes and they haven't paid.
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
-    const selectedPlan = toSelfServePlanId(data.plan) ?? "pro";
+    const selectedPlan = toPlanId(data.plan) ?? "pro";
 
     // 1. Create Business with unique slug
     let slug = data.businessName
