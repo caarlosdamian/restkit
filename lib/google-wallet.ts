@@ -1,7 +1,14 @@
 import { createSign } from 'crypto';
-import { capitalize, unitPlural } from './loyalty-labels';
+import { capitalize, loyaltyConfig, stampState, formatMXN } from './loyalty';
+import { buildCardLayout } from './card-layout';
+import { groundFor } from './card-colors';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
+import { absoluteAssetUrl } from './storage';
+
+function appUrl(): string {
+  return (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
 
 interface ServiceAccountJson {
   client_email: string;
@@ -61,9 +68,15 @@ async function getAccessToken(): Promise<string> {
 }
 
 function buildClass(issuerId: string, business: IBusiness) {
+  // Google fetches this url from its own servers, so it has to be absolute —
+  // and reachable, which a local `.uploads` path in development is not. The
+  // wallet form warns about exactly that when an asset lands on disk.
   const logoUrl =
-    business.branding?.logo ||
+    absoluteAssetUrl(business.branding?.logo) ||
     'https://storage.googleapis.com/wallet-lab-tools-codelab-artifacts-public/pass_google_logo.jpg';
+
+  const config = loyaltyConfig(business);
+  const isCashback = config.mechanic === 'cashback';
 
   return {
     id: `${issuerId}.${business.slug}`,
@@ -79,20 +92,150 @@ function buildClass(issuerId: string, business: IBusiness) {
     localizedIssuerName: {
       defaultValue: { language: 'es', value: business.name },
     },
-    rewardsTier: business.settings.rewardDescription,
-    rewardsTierLabel: 'Premio',
+    // Paints the whole Google card, the way backgroundColor paints the Apple
+    // one — and from the same resolved ground, so the two platforms match.
+    hexBackgroundColor: groundFor(
+      config.card.ground,
+      business.branding?.primaryColor || '#4f46e5'
+    ),
+    rewardsTier: isCashback
+      ? `${config.cashback.rate}% de cada compra`
+      : config.sellos.rewardDescription,
+    rewardsTierLabel: isCashback ? 'Devolución' : 'Premio',
+    // Google is the one platform that lets us dictate the row layout outright.
+    // Apple only offers named slots on a fixed template, so this is where
+    // "control the layout" is actually possible — spend it.
+    classTemplateInfo: {
+      cardBarcodeSectionDetails: {
+        firstTopDetail: {
+          fieldSelector: {
+            fields: [{ fieldPath: "object.textModulesData['titular']" }],
+          },
+        },
+      },
+      detailsTemplateOverride: {
+        detailsItemInfos: [
+          { item: { firstValue: { fields: [{ fieldPath: "object.textModulesData['reward']" }] } } },
+          { item: { firstValue: { fields: [{ fieldPath: "object.textModulesData['howItWorks']" }] } } },
+        ],
+      },
+    },
     countryCode: 'MX',
+    ...(config.location?.latitude != null && config.location?.longitude != null
+      ? {
+          locations: [
+            { latitude: config.location.latitude, longitude: config.location.longitude },
+          ],
+        }
+      : {}),
   };
 }
 
-function buildObject(
-  issuerId: string,
-  customer: ICustomer,
-  business: IBusiness
-) {
+/**
+ * The points row — Google's equivalent of Apple's primary field.
+ *
+ * It read as sellos progress for every business, so a cashback programme
+ * showed "0 / 10 visitas" on Android while the same customer's iPhone showed
+ * their balance.
+ */
+function pointsFor(config: ReturnType<typeof loyaltyConfig>, customer: ICustomer) {
+  if (config.mechanic === 'cashback') {
+    return {
+      loyaltyPoints: {
+        label: 'Saldo',
+        balance: { string: formatMXN(customer.stats.cashbackBalance ?? 0) },
+      },
+      secondaryLoyaltyPoints: {
+        label: 'Mínimo para usar',
+        balance: { string: formatMXN(config.cashback.threshold) },
+      },
+    };
+  }
+
+  const state = stampState(customer.stats.currentVisits, config.sellos.required);
+  return {
+    loyaltyPoints: {
+      label: capitalize(config.sellos.unitPlural),
+      balance: { string: `${state.stamps} / ${config.sellos.required}` },
+    },
+    secondaryLoyaltyPoints: {
+      label: 'Total',
+      balance: { int: customer.stats.totalVisits },
+    },
+  };
+}
+
+/**
+ * The stamp card as Google's hero banner.
+ *
+ * Versioned by the counter it depicts: Google caches whatever it fetches, so
+ * without a changing URL a customer's card would keep showing the count it had
+ * when they first saved it.
+ */
+function heroImageFor(customer: ICustomer, business: IBusiness) {
+  const version =
+    loyaltyConfig(business).mechanic === 'cashback'
+      ? Math.round((customer.stats.cashbackBalance ?? 0) * 100)
+      : customer.stats.currentVisits;
+
+  return {
+    sourceUri: { uri: `${appUrl()}/api/passes/strip/${customer.publicToken}?v=${version}` },
+    contentDescription: {
+      defaultValue: { language: 'es', value: `Tarjeta de ${business.name}` },
+    },
+  };
+}
+
+/**
+ * The photo in a band of its own, below the card.
+ *
+ * Only for `footer` placement — under `background` or `side` the photo is
+ * already composited into the hero, and showing it twice would be worse than
+ * not showing it at all. This is the placement Apple cannot do: a storeCard has
+ * exactly one image slot, and `footer.png` belongs to boardingPass.
+ */
+function imageModulesFor(business: IBusiness) {
+  const config = loyaltyConfig(business);
+  if (config.card.photoPlacement !== 'footer') return {};
+  const uri = absoluteAssetUrl(config.card.stripImage);
+  if (!uri) return {};
+
+  return {
+    imageModulesData: [
+      {
+        id: 'photo',
+        mainImage: {
+          sourceUri: { uri },
+          contentDescription: {
+            defaultValue: { language: 'es', value: business.name },
+          },
+        },
+      },
+    ],
+  };
+}
+
+function buildObject(issuerId: string, customer: ICustomer, business: IBusiness) {
   const customerId = (customer._id as { toString(): string }).toString();
-  const required = business.settings.requiredVisits;
-  const current = customer.stats.currentVisits;
+  const config = loyaltyConfig(business);
+
+  const layout = buildCardLayout(
+    {
+      businessName: business.name,
+      config,
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        createdAt: (customer as { createdAt?: Date }).createdAt,
+        stats: customer.stats,
+      },
+      // The hero image IS the stamp card here, and `loyaltyPoints` already
+      // states the number, so the progress must not be repeated a third time.
+      hasStrip: true,
+    },
+    config.card.fields
+  );
 
   return {
     id: `${issuerId}.cust-${customerId}`,
@@ -100,32 +243,35 @@ function buildObject(
     state: 'ACTIVE',
     accountId: customerId,
     accountName: customer.name,
-    loyaltyPoints: {
-      label: capitalize(unitPlural(business)),
-      balance: { string: `${current} / ${required}` },
-    },
-    secondaryLoyaltyPoints: {
-      label: 'Total',
-      balance: { int: customer.stats.totalVisits },
-    },
-    textModulesData: [
-      {
-        id: 'reward',
-        header: 'Premio',
-        body: business.settings.rewardDescription,
-      },
-      {
-        id: 'contact',
-        header: 'Contacto',
-        body: customer.email || customer.phone || '',
-      },
-    ],
+    ...pointsFor(config, customer),
+    heroImage: heroImageFor(customer, business),
+    ...imageModulesFor(business),
+    textModulesData: textModulesFor(layout, customer),
     barcode: {
       type: 'QR_CODE',
-      value: customerId,
+      // The opaque token, never the raw ObjectId. Apple and /c/ were fixed for
+      // this; Google was still handing out an enumerable id in every QR code.
+      value: `${appUrl()}/c/${customer.publicToken}`,
       alternateText: customer.name,
     },
   };
+}
+
+/** The layout's fields as Google text modules, keyed so classTemplateInfo
+ *  above can address them by name rather than by position. */
+function textModulesFor(
+  layout: ReturnType<typeof buildCardLayout>,
+  customer: ICustomer
+): { id: string; header: string; body: string }[] {
+  const modules = [...layout.secondary, ...layout.auxiliary, ...layout.back]
+    .filter((f) => f.key !== 'progress')
+    .map((f) => ({ id: f.key, header: f.label, body: f.value }));
+
+  if (!modules.some((m) => m.id === 'titular')) {
+    modules.unshift({ id: 'titular', header: 'TITULAR', body: customer.name });
+  }
+  // Google caps text modules at 10.
+  return modules.slice(0, 10);
 }
 
 export function generateGoogleWalletUrl(
@@ -165,8 +311,7 @@ export async function updateGoogleWalletObject(
 
   const customerId = (customer._id as { toString(): string }).toString();
   const objectId = `${issuerId}.cust-${customerId}`;
-  const required = business.settings.requiredVisits;
-  const current = customer.stats.currentVisits;
+  const config = loyaltyConfig(business);
 
   const token = await getAccessToken();
 
@@ -179,21 +324,10 @@ export async function updateGoogleWalletObject(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        loyaltyPoints: {
-          label: capitalize(unitPlural(business)),
-          balance: { string: `${current} / ${required}` },
-        },
-        secondaryLoyaltyPoints: {
-          label: 'Total',
-          balance: { int: customer.stats.totalVisits },
-        },
-        textModulesData: [
-          {
-            id: 'reward',
-            header: 'Premio',
-            body: business.settings.rewardDescription,
-          },
-        ],
+        ...pointsFor(config, customer),
+        // The hero carries the stamps, so an update that left it alone would
+        // move the number and leave the picture of the card behind.
+        heroImage: heroImageFor(customer, business),
       }),
     }
   );

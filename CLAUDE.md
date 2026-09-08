@@ -58,6 +58,92 @@ The POS was refactored away from an insecure localStorage flow. **The POS now li
 
 ---
 
+## ⭐ Loyalty (POS-native) — read before touching stamps or cashback
+
+The differentiator: **the stamp happens at cobro** — no scanner, no extra step, nothing for the cashier to remember. That is the reason to buy RestKit over a standalone loyalty app.
+
+⚠️ **But it is not the only path, and must never be.** Earning at cobro only works for a business that moved its register to us. Making the loyalty programme depend on that made the product un-buyable for anyone who wants the cards and not the till — which is most of the market a standalone competitor sells to. **`/scan` is the fallback**, and the QR on the card is not decoration: it is how a business that kept its own register registers a visit at all. Any change that removes the QR, or that assumes an `Order` exists behind every accrual, breaks that whole segment.
+
+### The ledger is the law
+`models/Visit.ts` is an append-only ledger and the ONLY writer of `Customer.stats` is `services/loyalty.service.ts`. Never mutate `stats.currentVisits` or `stats.cashbackBalance` from a route or a page — go through the service so the history always explains the number.
+
+### Domain rules live in one pure module
+`lib/loyalty.ts` — no db, no Mongoose, just functions over values: `loyaltyConfig()`, `stampState()`, `accrualFor()`, `maxCashbackFor()`, `applyDelta()`. The service reads counters, asks this module what should happen, writes the result. Put new rules here, not in a route.
+
+### Flow at the till
+1. `components/pos/CustomerAttach.tsx` — 4+ digits of a phone hits `GET /api/pos/customers/lookup`, which returns **progress, not just a name** (the waiter mentioning "le falta 1 sello" is the point). 10 digits with no match offers inline enrolment.
+2. `PaymentModal` sends `customerId` (+ optional `cashbackApplied` / `redeemReward`) with the PAID PATCH.
+3. `PATCH /api/orders/[orderId]` redeems first, then accrues **after** the order is saved — a loyalty failure must never fail a payment that already went through.
+4. The response carries `loyalty` including `cardUrl` + `qrDataUrl`; the QR prints on the ticket, which is how a walk-in enrolled at the register actually gets the pass.
+
+### Invariants — do not break these
+- **Counters floor at zero.** `applyDelta()` enforces it.
+- **A delivered sellos reward is never clawed back.** `reverse()` refuses it.
+- **Reversing a cashback redemption returns balance only** — never rewrites the order, its ticket, or that shift's cash-up.
+- **A reversal is silent.** No `changeMessage` on a decrease: almost every reversal is an internal correction, and notifying raises a counter question nobody on shift can answer.
+- **Cash is what reached the drawer.** See the POSSession note below.
+- **Accrual is idempotent per order** via `uniq_accrual_per_order`; a retried PATCH is a no-op, not a second stamp.
+
+### The card image
+Apple has no stamps widget — a `storeCard` gets icon, logo and strip. `lib/strip-render.ts` renders `strip.png` per customer with sharp and re-issues on every update, which is what makes the card visibly fill up. Same renderer backs `GET /api/passes/preview`, so the dashboard preview is byte-identical to what ships. Icons come from `lib/stamp-icons.ts` (lucide paths, thickened for stamp size).
+
+**Three orthogonal design axes**, all on `settings.loyalty.card`:
+- `ground`: `light` (white card) | `brand` (painted in the business colour) | `dark` (a deep version of that hue, never generic black). A `stripImage` photo overrides all three.
+- `stampStyle`: `filled` (default — a solid badge with the icon **knocked out in the ground colour**; this is what reads across a counter) | `outline` (ring around the glyph) | `plain` (bare glyph, the original).
+- `photoPlacement` for `stripImage`: `background` (behind the stamps) | `side` (beside them, sharing the band) | `footer` (a band of its own below the card).
+
+⚠️ **`footer` does not exist on Apple.** A `storeCard` gets exactly one image slot — `strip.png`. `footer.png` is boardingPass-only and `background.png` is eventTicket-only, so there is no way to put a photo under the fields on an iPhone. `side` is how a photo and the stamps share an Apple card. Google renders `footer` as an `imageModulesData` band and the web card as a real band; the wallet form warns before an owner picks something one of their two platforms silently drops. The photo is **never shown twice**: under `background`/`side` it is already composited into the hero, so no image module is emitted.
+
+**Every colour on the card is derived from one value.** `lib/card-colors.ts` holds that math with no rendering attached — `groundFor()` resolves the ground, `readableInk()` shifts the brand colour until it clears 3:1 against it. It is a separate module from the renderer **because the renderer imports sharp and cannot be bundled into a browser component**: the wallet form's style picker and `components/loyalty/LoyaltyCard.tsx` import the same functions, so the chip an owner clicks is the treatment they get. Never hardcode a card colour anywhere else — a ground picked for one reason and ink picked for another is how white stamps ended up on a white strip.
+
+A low-saturation brand still falls back to outlined pending stamps under `plain` — grey on grey is no difference at all. Under `filled`/`outline` the disc already does that job.
+
+### What the card SAYS — one model, two wallets
+`lib/card-layout.ts` decides the card's content once; `lib/apple-pass.ts` and `lib/google-wallet.ts` only translate it. Writing the card twice is how the platforms silently drifted apart. The catalogue of available fields and their slot limits is in `lib/card-fields.ts` (import-free, so `loyalty.ts` and `card-layout.ts` can both use it without a cycle).
+
+**Three platform constraints are encoded there, not in the builders:**
+- ⚠️ **A `storeCard`'s `primaryFields` are drawn ON TOP of `strip.png`.** The pass used to ship both, so Wallet reprinted "3 de 10" across the customer's own stamps. `primary` is now empty whenever a strip is present, and a test holds that.
+- **A stacked pass in Wallet shows only the logo and the header fields**, which makes the header the most valuable slot, not an afterthought.
+- **Apple notifies on push only when a field carrying `changeMessage` changes value.** So `progress` must exist somewhere on every card — `buildCardLayout` forces it back into the header if the owner empties every slot. Remove that and stamps land in silence.
+
+The **strip caption never repeats the count** (both wallets print it in a field beside the strip); it names the distance to the reward instead — `Te faltan 6 visitas para tu premio`.
+
+Owners pick slot contents in `/dashboard/settings/wallet`; `components/settings/PassPreview.tsx` renders an Apple and a Google panel from **the same `buildCardLayout`**, so what they arrange is what ships. Defaults follow the mechanic (`defaultCardFields`) — a cashback card spends its second slot on the threshold, because the strip already prints the rate.
+
+### Google is where real layout control exists
+Apple gives named slots on a fixed template; Google's `classTemplateInfo` lets us dictate rows outright, and `hexBackgroundColor` paints the card. Both are now set from the same resolved ground as the strip.
+
+**`heroImage` carries the stamp card onto Android** via `GET /api/passes/strip/[token]` (public — the `publicToken` is the credential; Google's fetchers carry no session). Before this, Android got the text "4 / 10" and nothing else. **The URL is versioned by the counter** (`?v=<stamps>`): Google caches what it fetches, so a fixed URL would freeze the card at the count it had when saved. `updateGoogleWalletObject` re-sends the hero for the same reason.
+
+⚠️ Google's QR used to carry the raw customer `ObjectId`. Apple and `/c/` were fixed for that; Google was not. It now carries the same `/c/<publicToken>` URL.
+
+`components/loyalty/LoyaltyCard.tsx` draws the same card as HTML for `/c/[token]`, where a customer lands from the ticket QR. It deliberately is **not** the strip PNG (sized for Apple's 375×123 box; a blurry letterbox on a phone).
+
+**It is ONE template with optional blocks, not a layout per mechanic**: brand band › title › figures (stamps **or** balance) › holder › code › photo. A competitor's cashback card looks unlike their stamp card only because the stamps block is absent and the name and code grow into the space — nothing about the frame changes. Two hard-coded layouts would drift apart the first time either changed.
+
+Two rules keep every fact on the card exactly once, and both are tested:
+- **The name is in the band OR the title, never both.** With a logo the band is a letterhead (the mark alone) and the title carries the name; without one the band carries it and the title is dropped. Competitors print it in both places an inch apart — a flaw to skip, not a detail to copy.
+- **Cashback has no second column beside the holder.** "5% de cada compra" under "DEVUELVE 5%" is the same fact twice. Stamps carry no such figure, so the reward goes there instead.
+
+The card carries a QR (`qrDataUrl`, generated by the page since the component is sync), encoding the same `/c/<publicToken>` the wallet pass has always had in its barcode. **It is load-bearing, not decorative** — see the scanning section: it is the only way a business that kept its own register can register a visit.
+
+### Scanning — the no-POS path
+`/scan` (`app/scan/page.tsx` + `components/loyalty/ScanClient.tsx`) reads the customer's card and registers loyalty with **no order behind it**. Deliberately **not** under `/pos`: a business on its own register must never open a till screen — or a cash session — to stamp a card. Any signed-in role can scan; that is what the person behind the counter is there to do.
+
+- `GET/POST /api/loyalty/scan/[token]` — the token identifies the **customer**; `businessId` always comes from `getBusinessContext()`. A token belonging to another business **404s, never 403s** — confirming "this code is real but not yours" is a lookup service for anyone holding a stolen ticket.
+- Decoding is client-side. `BarcodeDetector` where it exists, **jsQR everywhere else** — Safari on iOS has no `BarcodeDetector`, and without the fallback the scanner would work on Android and silently not on iPhone.
+- ⚠️ **`SCAN_COOLDOWN_MS` (3 min) is what stops a double scan becoming a double stamp.** There is no `orderId`, so `uniq_accrual_per_order` does not apply and `sellos.maxPerDay` is off by default. Staff can override with `force: true` after a confirm.
+- **Cashback scanning requires an amount** — a percentage of nothing is nothing, so the cashier types the ticket total. Returns `400 AMOUNT_REQUIRED` without it.
+- Accruals go through `loyaltyService` with `manual: true`, so a scanned visit is an ordinary ledger entry and reverses exactly like one from the till.
+- **Writing is gated by the subscription (402), reading is not.** Registering a visit is selling, so it sits behind the same money gate as opening the register — otherwise an expired business stamps cards forever. `GET` stays open: a cashier mid-transaction should see who they are serving and why it failed, not a blank screen.
+
+`lib/customer-summary.ts` is the one shape the till lookup and the scanner both return — two ways of identifying the same person, and two shapes would drift the first time either grew a field.
+
+### Key files
+`lib/loyalty.ts`, `lib/card-colors.ts`, `lib/customer-summary.ts`, `lib/card-fields.ts`, `lib/card-layout.ts`, `lib/strip-render.ts`, `lib/stamp-icons.ts`, `components/loyalty/LoyaltyCard.tsx`, `components/settings/PassPreview.tsx`, `lib/session-totals.ts`, `lib/qr.ts`, `services/loyalty.service.ts`, `components/pos/CustomerAttach.tsx`, `components/settings/WalletForm.tsx`, `components/dashboard/CustomerHistory.tsx`, `components/loyalty/ScanClient.tsx`.
+
+---
+
 ## Project Structure
 
 ```
@@ -97,9 +183,10 @@ Role-based access control (RBAC). Three roles: OWNER, ADMIN, STAFF.
 
 ### **Business**
 Restaurant entity. One per subscription account.
-- `name`, `slug`, `branding` (logo, primaryColor), `settings` (requiredVisits, rewardDescription)
+- `name`, `slug`, `branding` (logo, primaryColor)
+- **`settings.loyalty`** — the whole loyalty programme in one namespaced object: `mechanic` (`sellos` | `cashback`, exactly one active), `sellos` (`required`, `rewardDescription`, `unitSingular`, `unitPlural`, optional `minTicket`/`maxPerDay` guards — both off by default), `cashback` (`rate`, `threshold`, optional `expiryDays` — unset, balance never expires), `card` (`stampIcon`, `customIconUrl`, `stripImage`, `bgColor`), optional `location` (geofence). Read it through `loyaltyConfig()` in `lib/loyalty.ts`, never off the document directly.
 - **ticket** (NEW): `fiscalName`, `rfc`, `phone`, `address`, `fiscalAddress`, `website`, `footerMessage`
-- **subscription** (NEW): `plan` (basic/pro/enterprise), `billingPeriod` (monthly/annual), `status` (trialing/active/past_due/canceled), `trialEndsAt`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodEnd`. New businesses start `trialing` for 14 days with **no card** (set in `businessService`). Gate logic in `lib/subscription.ts` (`evaluateSubscription`) is conservative — a **missing** subscription is grandfathered (never gated), so legacy/seed businesses and tests aren't locked out. See Billing section.
+- **subscription** (NEW): `plan` (lite/basic/pro), `billingPeriod` (monthly/annual), `status` (trialing/active/past_due/canceled), `trialEndsAt`, `stripeCustomerId`, `stripeSubscriptionId`, `currentPeriodEnd`. New businesses start `trialing` for 14 days with **no card** (set in `businessService`). Gate logic in `lib/subscription.ts` (`evaluateSubscription`) is conservative — a **missing** subscription is grandfathered (never gated), so legacy/seed businesses and tests aren't locked out. See Billing section.
 - Used to scope all other data (tables, products, orders, customers, staff)
 
 ### **Table**
@@ -127,19 +214,25 @@ Per-table order during a shift.
 ### **POSSession**
 Cash register session (one open per business at a time).
 - `businessId`, `staffId`, `staffName`, `status` (OPEN/CLOSED), `openingBalance`, `closingBalance`
-- Sales rollups: `totalSales`, `totalOrders`, `cashSales`, `cardSales`, `transferSales`, `expectedCash`, `actualCash`, `variance`
+- Sales rollups: `totalSales`, `totalOrders`, `cashSales`, `cardSales`, `transferSales`, `cashbackRedeemed`, `expectedCash`, `actualCash`, `variance`
+- ⚠️ **`cashSales` is money that reached the drawer, not gross.** `lib/session-totals.ts` subtracts `Order.cashbackApplied`; counting the gross made every cashback redemption read as a shortfall at cash-up. Both `/current` and `/close` go through `sessionTotals()` so they can't drift.
 - Opened/closed by a manager from `/pos/dashboard`. Sales computed from PAID orders since `startedAt`.
 
 ### **Customer**
 Loyalty program member.
 - `businessId`, `name`, `email`, `phone`
-- `stats` (totalVisits, currentVisits, points)
+- `stats` (`totalVisits`, `currentVisits`, `cashbackBalance`). `currentVisits` may exceed the required count — `stampState()` derives pending rewards and displayed progress from that one number, so a customer who keeps buying before claiming never loses a stamp.
+- `publicToken` — 20 random bytes, the key for `/c/[token]`. Kept separate from `appleAuthToken`, which is a PassKit credential and must never travel in a URL.
 - `externalIds` (appleAuthToken, applePass, googlePass)
+- ⚠️ The `{businessId, email}` / `{businessId, phone}` uniques are **partial** (`$type: 'string'`), not `sparse`: a sparse index still indexes an explicit null, which made the second phone-only walk-in collide with the first.
 
-### **Visit**
-Loyalty record per customer visit.
-- `customerId`, `businessId`, `notes`, `createdAt`
-- Triggers loyalty updates (increments currentVisits, may unlock reward)
+### **Visit** — the loyalty ledger
+Every change to `Customer.stats` is an entry here plus the counter it implies. **Nothing else writes those counters.**
+- `customerId`, `businessId`, `employeeId`, `type`, `mechanic`, `delta`, `orderId`, `orderTotal`, `tableName`, `reversesVisitId`
+- `type`: `ACCRUAL` (earned) | `REWARD_REDEMPTION` (spent) | `REVERSAL` (compensates an earlier entry)
+- `delta` is signed — stamps for `sellos`, MXN for `cashback`
+- `uniq_accrual_per_order`: unique partial on `{orderId, mechanic}` for ACCRUALs, so a retried `PATCH /api/orders/[id]` is a no-op instead of a second stamp
+- **Entries are never deleted.** "Quitar una compra" writes a compensating REVERSAL beside the original.
 
 ### **AppleDevice**
 Device registration for Apple Wallet push updates.
@@ -183,6 +276,10 @@ All routes require authentication via `better-auth`.
 - `POST /api/waiter/available-tables` — POS table grid: tables + active order summary + `isOccupied`.
 - `PATCH /api/pos/tables/[tableId]/occupancy` — Toggle manual `isOccupied`. Body: `{ isOccupied: boolean }`.
 
+### Loyalty — scanning (no POS required)
+- `GET /api/loyalty/scan/[token]` — resolve a scanned card to the customer + progress, scoped to the session's business. 404 for a token from another business.
+- `POST /api/loyalty/scan/[token]` — `{ action: 'accrue' | 'redeemReward' | 'redeemCashback', amount?, force? }`. **409 `RECENTLY_STAMPED`** inside the cooldown; **400 `AMOUNT_REQUIRED`** for cashback with no amount.
+
 ### Customers
 - `GET /api/customers` — List all customers
 - `POST /api/customers` — Create customer
@@ -205,7 +302,8 @@ All routes require authentication via `better-auth`.
 - `POST /api/billing/checkout` (OWNER) — subscription Checkout session for `{ plan, period }`; reuses/creates the Stripe customer, returns `{ url }`.
 - `POST /api/billing/portal` (OWNER) — Stripe Billing Portal session, returns `{ url }`.
 - `POST /api/stripe/webhook` — raw-body, `STRIPE_WEBHOOK_SECRET`-verified; `billingService.applyStripeEvent` maps `customer.subscription.*` → `Business.subscription`.
-- **Plan catalog** = single source of truth in `lib/plans.ts` (pure data, no Stripe/env — shared by client pricing UI + server). `lib/stripe.ts` = guarded client (`requireStripe()`) + `priceIdFor(plan, period)` (reads `STRIPE_PRICE_*` env). `lib/subscription.ts` = `evaluateSubscription` gate.
+- **Plan catalog** = single source of truth in `lib/plans.ts` (pure data, no Stripe/env — shared by client pricing UI + server). Three tiers differing mainly by **capacity**, not feature locks: **Lite** ($249 — full POS, 6 tables, 2 seats), **Básico** ($599 — unlimited tables, 10 seats, CFDI), **Profesional** ($1299 — unlimited seats + inventory, KDS, reports). `lib/stripe.ts` = guarded client (`requireStripe()`) + `priceIdFor(plan, period)` (reads `STRIPE_PRICE_*` env). `lib/subscription.ts` = `evaluateSubscription` gate (trial/access). `lib/plans.ts`'s `planAllows()` + `lib/feature-gate.ts`'s `requireFeature()` = feature gate; `PLAN_LIMITS` + `requireCapacity()` = capacity gate. **Both only bite a *purchased* plan, never the free trial.**
+- ⚠️ **POS is NOT gated by tier.** It was, and that locked POS-native loyalty — the whole differentiator against loyalia.app — out of Lite, the only tier that competes on price. Every plan gets the register; Lite is bounded by 6 tables / 2 seats instead. Enforced at `POST /api/tables` and `POST /api/staff`, which return **403 `PLAN_LIMIT_REACHED`** with the ceiling and an upgrade route (the forms render that as an amber "Ver planes" prompt, not a red error).
 - **Trial-without-card**: signup starts a 14-day `trialing`; trial expiry is time-based (no Stripe involvement until they pay). Gate: dashboard layout walls expired businesses (except `/dashboard/billing`) via the `x-pathname` header set in `proxy.ts`; `POST /api/pos-session/start` returns **402** when expired (can't open the register). The app is fully usable during the trial with **no Stripe config**; checkout just 500s with a clear "price not configured" until `STRIPE_PRICE_*` are set.
 
 ### Settings
@@ -215,6 +313,7 @@ All routes require authentication via `better-auth`.
 
 ### Apple Wallet
 - `GET /api/passes/apple/[customerId]` — Download .pkpass file
+- `GET /api/passes/strip/[token]` — the customer's stamp card as a public PNG. Unauthenticated by design: Google fetches it for `heroImage` and carries no session; the `publicToken` is the credential.
 - `POST /api/wallet/apple/v1/devices/[deviceId]/registrations/[passTypeId]/[serialNumber]` — Register device for push
 - `GET /api/wallet/apple/v1/passes/[passTypeId]/[serialNumber]` — Fetch updated pass (for pushes)
 - `POST /api/wallet/apple/v1/log` — Log Apple errors
@@ -410,11 +509,17 @@ All dashboard pages are async server components that:
 5. **Delivery**: Not implemented.
 6. **CFDI**: Fiscal invoice integration not built.
 7. **Multi-language**: Spanish only (es-MX).
-8. **Export/Reports**: No CSV/PDF export of orders or customers.
+8. **Export/Reports**: CSV export exists for loyalty (`/api/reports/loyalty.csv`). Orders and inventory still have none; no PDF anywhere.
 9. **`businessId` type debt (Fase 4, not done)**: string in `user` collection vs ObjectId in domain collections. Currently mitigated with `$in: [businessIdStr, businessId]` on `user` lookups; normalize at the root eventually.
 10. **PIN throttle is in-memory** (per process) in `verify-pin` — move to Redis / a per-user lockout for multi-node.
 11. **PaymentModal does not send the waiter token** — the payment is attributed to the terminal user, not the waiter (usually fine; cobro is done by cashier/manager).
 12. **PINs need backfilling**: existing staff have no `pinHash` until set via staff create or `PATCH /api/staff/[id]`.
+13. **Stamp farming is possible by design** — one stamp per paid order with no minimum ticket and no daily cap, so splitting one bill into four earns four stamps. `settings.loyalty.sellos.minTicket` / `maxPerDay` exist and are enforced; they're simply unset. Turning them on is a settings change, not a migration.
+14. **Cashback never expires** — the liability only grows. `/dashboard/loyalty` surfaces "pasivo vivo" so it's at least visible, and `cashback.expiryDays` is in the schema unused if a policy is ever wanted.
+15. **Reversing a cashback redemption doesn't touch the order or the shift** — the balance returns to the customer and the business absorbs the discount twice. Deliberate: rewriting a signed-off cash-up would hand a retroactive shortfall to a manager who did nothing wrong.
+16. **Brand assets fall back to local disk without `BLOB_READ_WRITE_TOKEN`** — `lib/storage.ts` writes to `./.uploads` and serves from `/api/uploads/[...path]`, so local dev needs no Vercel account. The wallet form warns when an asset landed locally: Google fetches the logo URL from its own servers and cannot reach localhost, so the token IS required before issuing real Google passes.
+    - ⚠️ **A local asset URL is stored RELATIVE** (`/api/uploads/…`). It used to bake `APP_URL` in at upload time, which is why "the logo doesn't show in development": `APP_URL` in dev points at a tunnel so Apple can reach the box, so every uploaded logo was served from a host the owner's own browser could not load — and once the tunnel rotated, from nowhere at all. Three helpers in `lib/storage.ts` keep this straight: `assetSrc()` for the browser (strips the host, so legacy rows with a dead tunnel baked in still render), `absoluteAssetUrl()` for anything a third party must fetch (Google), and **`readAsset()` for our own server-side work** — it reads a local asset straight off disk rather than HTTP round-tripping to ourselves, which needed `APP_URL` to be reachable and risked a Next route awaiting its own server.
+17. **The stamp icon catalogue has 58 icons**, not the 100 Loyalia advertises. Structure supports more; it's a matter of picking and thickening more lucide paths.
 
 ---
 
@@ -457,5 +562,5 @@ All dashboard pages are async server components that:
 
 ---
 
-**Last updated**: 2026-07-12  
-**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes), and **Stripe subscription billing** (14-day trial-without-card, pricing→signup plan selection, checkout/portal/webhook, POS + dashboard subscription gate).
+**Last updated**: 2026-09-07  
+**Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes), **Stripe subscription billing** (14-day trial-without-card, pricing→signup plan selection, checkout/portal/webhook, POS + dashboard subscription gate), and **POS-native loyalty** (Fases 1–2 + reporting: append-only ledger on `Visit`, phone attach at cobro, generated `strip.png` cards with a 58-icon catalogue and live preview, reward-ready state and redemption, purchase history with reversals, cashback with threshold redemption split correctly out of the cash-up, ROI panel and CSV export). Fixed along the way: "Premios entregados" always read zero, the stamp counter reset at the moment of earning, `/c/` was unauthenticated over enumerable ObjectIds, the Apple pass could be issued permanently un-updatable, and the customer email index was `sparse` where it needed to be partial.

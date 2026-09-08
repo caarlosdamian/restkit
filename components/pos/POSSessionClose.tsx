@@ -15,6 +15,7 @@ interface SessionData {
   totalSales: number;
   totalOrders: number;
   cashSales: number;
+  cashbackRedeemed?: number;
   cardSales: number;
   transferSales: number;
 }

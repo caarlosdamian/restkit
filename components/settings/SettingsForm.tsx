@@ -7,12 +7,6 @@ import { printReceipt } from "@/lib/receipt-html";
 interface BusinessData {
   name: string;
   branding: { primaryColor: string; logo?: string };
-  settings: {
-    requiredVisits: number;
-    rewardDescription: string;
-    unitSingular: string;
-    unitPlural: string;
-  };
   ticket: {
     fiscalName?: string;
     rfc?: string;
@@ -95,29 +89,14 @@ export default function SettingsForm({ initial }: { initial: BusinessData }) {
             className={inputCls}
           />
         </Field>
-        <Field label="Color principal">
-          <div className="flex items-center gap-3">
-            <input
-              type="color"
-              value={data.branding.primaryColor}
-              onChange={(e) => setField("branding.primaryColor", e.target.value)}
-              className="w-10 h-10 rounded-xl border border-gray-200 cursor-pointer p-0.5"
-            />
-            <input
-              value={data.branding.primaryColor}
-              onChange={(e) => setField("branding.primaryColor", e.target.value)}
-              placeholder="#10b981"
-              className={`${inputCls} font-mono`}
-            />
-          </div>
-        </Field>
-        <Field label="URL del logo">
-          <input
-            value={data.branding.logo ?? ""}
-            onChange={(e) => setField("branding.logo", e.target.value)}
-            placeholder="https://turestaurante.com/logo.png"
-            className={inputCls}
-          />
+        <Field label="Color y logo">
+          <a
+            href="/dashboard/settings/wallet"
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors no-underline"
+          >
+            {/* Both drive the loyalty card, so they're edited beside its preview. */}
+            Editar junto a la tarjeta →
+          </a>
         </Field>
       </Section>
 
@@ -209,46 +188,18 @@ export default function SettingsForm({ initial }: { initial: BusinessData }) {
         </Field>
       </Section>
 
-      {/* ── Fidelización ── */}
-      <Section title="Programa de fidelización" desc="Configura las reglas de tu tarjeta de lealtad.">
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Unidad (singular)" hint='Ej. "visita", "compra", "sello"'>
-            <input
-              value={data.settings.unitSingular}
-              onChange={(e) => setField("settings.unitSingular", e.target.value)}
-              placeholder="visita"
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Unidad (plural)" hint='Ej. "visitas", "compras", "sellos"'>
-            <input
-              value={data.settings.unitPlural}
-              onChange={(e) => setField("settings.unitPlural", e.target.value)}
-              placeholder="visitas"
-              className={inputCls}
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label={`${data.settings.unitPlural || "Visitas"} para premio`}>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={data.settings.requiredVisits}
-              onChange={(e) => setField("settings.requiredVisits", parseInt(e.target.value) || 10)}
-              className={inputCls}
-            />
-          </Field>
-          <Field label="Descripción del premio">
-            <input
-              value={data.settings.rewardDescription}
-              onChange={(e) => setField("settings.rewardDescription", e.target.value)}
-              placeholder="Un café gratis"
-              className={inputCls}
-            />
-          </Field>
-        </div>
+      {/* Loyalty lives on its own page now — it grew a mechanic switch, card
+          design, an icon catalogue and a live preview, none of which fit here. */}
+      <Section
+        title="Programa de fidelización"
+        desc="El diseño de la tarjeta, la mecánica y el premio se configuran en su propia página."
+      >
+        <a
+          href="/dashboard/settings/wallet"
+          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors no-underline"
+        >
+          Configurar tarjeta de fidelidad →
+        </a>
       </Section>
 
       {/* Save button */}

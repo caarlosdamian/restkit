@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X, Banknote, CreditCard, ArrowRightLeft, Printer, CheckCircle2 } from "lucide-react";
+import { X, Banknote, CreditCard, ArrowRightLeft, Printer, CheckCircle2, Gift, Wallet } from "lucide-react";
 import { printReceipt, type ReceiptData } from "@/lib/receipt-html";
+import CustomerAttach, { type AttachedCustomer } from "./CustomerAttach";
 
 type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "OTHER";
 
@@ -54,18 +55,31 @@ export default function PaymentModal({
   onPaid,
 }: PaymentModalProps) {
   const [method, setMethod]             = useState<PaymentMethod>("CASH");
-  const [amountReceived, setAmount]     = useState<string>(total.toFixed(2));
+  // null until the cashier types: the prefill tracks what's actually due, so
+  // applying a discount doesn't leave a stale amount in the box.
+  const [typedAmount, setTyped]         = useState<string | null>(null);
   const [loading, setLoading]           = useState(false);
   const [paid, setPaid]                 = useState(false);
   const [receiptData, setReceiptData]   = useState<ReceiptData | null>(null);
+  const [customer, setCustomer]         = useState<AttachedCustomer | null>(null);
+  const [useCashback, setUseCashback]   = useState(false);
+  const [redeemReward, setRedeemReward] = useState(false);
+
+  // Cashback comes off the bill; `total` stays gross so the ticket can show
+  // the discount, and the drawer only ever expects the difference.
+  const cashbackApplied = useCashback && customer ? customer.maxCashback : 0;
+  const due = Math.max(0, total - cashbackApplied);
+
+  const amountReceived = typedAmount ?? due.toFixed(2);
+  const setAmount = (v: string) => setTyped(v);
 
   const change = method === "CASH"
-    ? Math.max(0, parseFloat(amountReceived || "0") - total)
+    ? Math.max(0, parseFloat(amountReceived || "0") - due)
     : 0;
 
   const canConfirm =
     method !== "CASH" ||
-    parseFloat(amountReceived || "0") >= total;
+    parseFloat(amountReceived || "0") >= due;
 
   async function handleConfirm() {
     setLoading(true);
@@ -76,6 +90,11 @@ export default function PaymentModal({
       };
       if (method === "CASH") {
         body.amountReceived = parseFloat(amountReceived);
+      }
+      if (customer) {
+        body.customerId = customer.id;
+        if (cashbackApplied > 0) body.cashbackApplied = cashbackApplied;
+        if (redeemReward) body.redeemReward = true;
       }
 
       const res = await fetch(`/api/orders/${orderId}`, {
@@ -98,6 +117,20 @@ export default function PaymentModal({
         amountReceived: method === "CASH" ? parseFloat(amountReceived) : undefined,
         change: method === "CASH" ? change : undefined,
         closedAt: new Date(data.closedAt ?? Date.now()),
+        cashbackApplied: cashbackApplied > 0 ? cashbackApplied : undefined,
+        loyalty: data.loyalty
+          ? {
+              name: customer?.name ?? "",
+              cardUrl: data.loyalty.cardUrl,
+              mechanic: data.loyalty.mechanic,
+              stamps: data.loyalty.stamps,
+              required: data.loyalty.required,
+              balance: data.loyalty.cashbackBalance,
+              rewardReady: data.loyalty.rewardsPending > 0,
+              unitPlural: customer?.unitPlural,
+              qrDataUrl: data.loyalty.qrDataUrl,
+            }
+          : undefined,
       };
 
       setReceiptData(receipt);
@@ -134,6 +167,39 @@ export default function PaymentModal({
                 </p>
               )}
             </div>
+
+            {receiptData?.loyalty && (
+              <div className="w-full rounded-2xl bg-gray-50 border border-gray-100 p-4 flex flex-col items-center gap-2">
+                {receiptData.loyalty.rewardReady ? (
+                  <p className="text-sm font-bold text-amber-600 flex items-center gap-1.5">
+                    <Gift size={15} /> ¡{receiptData.loyalty.name} ganó su premio!
+                  </p>
+                ) : receiptData.loyalty.mechanic === "cashback" ? (
+                  <p className="text-sm font-semibold text-gray-700">
+                    Saldo de {receiptData.loyalty.name}: ${(receiptData.loyalty.balance ?? 0).toFixed(2)}
+                  </p>
+                ) : (
+                  <p className="text-sm font-semibold text-gray-700">
+                    {receiptData.loyalty.name} · {receiptData.loyalty.stamps} de {receiptData.loyalty.required}
+                  </p>
+                )}
+                {receiptData.loyalty.qrDataUrl && (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={receiptData.loyalty.qrDataUrl}
+                      alt="QR de la tarjeta de fidelidad"
+                      width={112}
+                      height={112}
+                      className="rounded-xl bg-white p-1.5"
+                    />
+                    <p className="text-xs text-gray-400 text-center">
+                      También va impreso en el ticket
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             <div className="flex gap-3 w-full pt-2">
               <button
                 onClick={handlePrint}
@@ -166,8 +232,49 @@ export default function PaymentModal({
               {/* Total */}
               <div className="text-center py-3 bg-gray-50 rounded-2xl">
                 <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Total a cobrar</p>
-                <p className="text-4xl font-extrabold tracking-tight text-gray-900">${total.toFixed(2)}</p>
+                <p className="text-4xl font-extrabold tracking-tight text-gray-900">${due.toFixed(2)}</p>
+                {cashbackApplied > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    ${total.toFixed(2)} − ${cashbackApplied.toFixed(2)} de saldo
+                  </p>
+                )}
               </div>
+
+              <CustomerAttach orderTotal={total} value={customer} onChange={(c) => {
+                setCustomer(c);
+                setUseCashback(false);
+                setRedeemReward(false);
+              }} />
+
+              {customer?.rewardsPending ? (
+                <label className="flex items-center gap-3 rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={redeemReward}
+                    onChange={(e) => setRedeemReward(e.target.checked)}
+                    className="w-4 h-4 accent-amber-500"
+                  />
+                  <Gift size={16} className="text-amber-600 shrink-0" />
+                  <span className="text-sm font-semibold text-amber-900 flex-1">
+                    Canjear premio · {customer.rewardDescription}
+                  </span>
+                </label>
+              ) : null}
+
+              {customer?.cashbackRedeemable && customer.maxCashback > 0 && (
+                <label className="flex items-center gap-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 px-4 py-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useCashback}
+                    onChange={(e) => setUseCashback(e.target.checked)}
+                    className="w-4 h-4 accent-emerald-500"
+                  />
+                  <Wallet size={16} className="text-emerald-600 shrink-0" />
+                  <span className="text-sm font-semibold text-emerald-900 flex-1">
+                    Usar ${customer.maxCashback.toFixed(2)} de saldo
+                  </span>
+                </label>
+              )}
 
               {/* Payment method */}
               <div>
@@ -201,7 +308,7 @@ export default function PaymentModal({
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">$</span>
                       <input
                         type="number"
-                        min={total}
+                        min={due}
                         step={0.01}
                         value={amountReceived}
                         onChange={(e) => setAmount(e.target.value)}
@@ -215,10 +322,10 @@ export default function PaymentModal({
                     {[50, 100, 200, 500].map((amt) => (
                       <button
                         key={amt}
-                        onClick={() => setAmount(String(Math.ceil(total / amt) * amt))}
+                        onClick={() => setAmount(String(Math.ceil(due / amt) * amt))}
                         className="flex-1 py-3 rounded-xl bg-gray-100 text-sm font-bold text-gray-600 hover:bg-gray-200 active:scale-95 transition-all"
                       >
-                        ${Math.ceil(total / amt) * amt}
+                        ${Math.ceil(due / amt) * amt}
                       </button>
                     ))}
                   </div>

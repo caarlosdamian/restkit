@@ -4,6 +4,8 @@ import Order from '@/models/Order';
 import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import { getBusinessContext, isManager } from '@/lib/pos-auth';
+import { sessionTotals, expectedCashFor } from '@/lib/session-totals';
+import { round2 } from '@/lib/loyalty';
 
 export async function POST(req: Request) {
   const ctx = await getBusinessContext();
@@ -36,19 +38,10 @@ export async function POST(req: Request) {
     closedAt: { $gte: posSession.startedAt },
   });
 
-  let cashSales = 0;
-  let cardSales = 0;
-  let transferSales = 0;
-
-  paidOrders.forEach((order) => {
-    if (order.paymentMethod === 'CASH') cashSales += order.total;
-    else if (order.paymentMethod === 'CARD') cardSales += order.total;
-    else if (order.paymentMethod === 'TRANSFER') transferSales += order.total;
-  });
-
-  const totalSales = cashSales + cardSales + transferSales;
-  const expectedCash = posSession.openingBalance + cashSales;
-  const variance = Number(closingBalance) - expectedCash;
+  const totals = sessionTotals(paidOrders);
+  const { cashSales, cardSales, transferSales, totalSales, cashbackRedeemed } = totals;
+  const expectedCash = expectedCashFor(posSession.openingBalance, totals);
+  const variance = round2(Number(closingBalance) - expectedCash);
 
   // Close the session
   posSession.closedAt = new Date();
@@ -58,6 +51,7 @@ export async function POST(req: Request) {
   posSession.cashSales = cashSales;
   posSession.cardSales = cardSales;
   posSession.transferSales = transferSales;
+  posSession.cashbackRedeemed = cashbackRedeemed;
   posSession.expectedCash = expectedCash;
   posSession.actualCash = Number(closingBalance);
   posSession.variance = variance;
@@ -87,6 +81,7 @@ export async function POST(req: Request) {
       cashSales: posSession.cashSales,
       cardSales: posSession.cardSales,
       transferSales: posSession.transferSales,
+      cashbackRedeemed: posSession.cashbackRedeemed,
 
       // Cash cut
       expectedCash,

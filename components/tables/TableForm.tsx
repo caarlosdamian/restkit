@@ -10,6 +10,9 @@ export default function TableForm() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // A capacity ceiling isn't a failure — it means the business outgrew the
+  // plan, so it gets a way forward instead of a red error box.
+  const [atPlanLimit, setAtPlanLimit] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -29,7 +32,11 @@ export default function TableForm() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al guardar");
+      if (!res.ok) {
+        setAtPlanLimit(data.code === "PLAN_LIMIT_REACHED");
+        throw new Error(data.error || "Error al guardar");
+      }
+      setAtPlanLimit(false);
       setOpen(false);
       router.refresh();
     } catch (err) {
@@ -118,7 +125,19 @@ export default function TableForm() {
             </datalist>
           </div>
 
-          {error && (
+          {error && atPlanLimit && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-2">
+              <p className="text-sm font-semibold text-amber-900">{error}</p>
+              <a
+                href="/dashboard/billing"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600 transition-colors no-underline"
+              >
+                Ver planes →
+              </a>
+            </div>
+          )}
+
+          {error && !atPlanLimit && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
               {error}
             </div>

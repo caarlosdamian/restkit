@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import type { NextRequest as NextType } from 'next/server';
 import { hashPin } from '@/lib/waiter-token';
 import { revalidatePath } from 'next/cache';
+import { requireCapacity } from '@/lib/feature-gate';
 
 // Only OWNER can manage staff
 async function requireOwner() {
@@ -56,6 +57,18 @@ export async function POST(req: NextType) {
   if (!name || !employeeNumber) {
     return NextResponse.json({ error: 'Nombre y número de empleado son requeridos' }, { status: 400 });
   }
+
+  // Seat ceiling for the plan. Counts everyone including the owner, since a
+  // "2 usuarios" plan means two seats in total, not two on top of the owner.
+  // businessId is a STRING in the Better Auth `user` collection but an ObjectId
+  // in domain collections, so match both forms (see CLAUDE.md, Fase 4 debt).
+  await dbConnect();
+  const businessIdStr = session.user.businessId;
+  const seats = await mongoose.connection.collection('user').countDocuments({
+    businessId: { $in: [businessIdStr, new mongoose.Types.ObjectId(businessIdStr)] },
+  });
+  const overLimit = await requireCapacity(businessIdStr, 'staff', seats);
+  if (overLimit) return overLimit;
 
   if (pin !== undefined && pin !== '' && !/^\d{4,6}$/.test(String(pin))) {
     return NextResponse.json({ error: 'El PIN debe tener entre 4 y 6 dígitos' }, { status: 400 });

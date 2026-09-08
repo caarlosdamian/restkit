@@ -35,11 +35,12 @@ export const PLANS: Plan[] = [
     name: 'Lite',
     monthly: 249,
     annual: annualRate(249),
-    desc: 'Para negocios que solo quieren fidelizar clientes con tarjeta digital.',
+    desc: 'Para cafeterías y negocios pequeños que quieren empezar completo.',
     features: [
+      'POS completo — hasta 6 mesas',
+      'Fidelización automática al cobrar',
       'Clientes ilimitados',
-      'Fidelización (wallet)',
-      'Menú QR digital',
+      '2 usuarios',
       'Soporte por email',
     ],
     highlight: false,
@@ -50,10 +51,11 @@ export const PLANS: Plan[] = [
     name: 'Básico',
     monthly: 599,
     annual: annualRate(599),
-    desc: 'Ideal para cafeterías y negocios pequeños.',
+    desc: 'Para restaurantes en operación, sin techo de mesas.',
     features: [
       'Todo lo del plan Lite',
-      'POS (mesas y cobro)',
+      'Mesas ilimitadas',
+      '10 usuarios',
       'Facturación CFDI',
       'Soporte por email',
     ],
@@ -65,10 +67,10 @@ export const PLANS: Plan[] = [
     name: 'Profesional',
     monthly: 1299,
     annual: annualRate(1299),
-    desc: 'Para restaurantes que necesitan más control.',
+    desc: 'Para restaurantes que necesitan control total.',
     features: [
       'Todo lo del plan Básico',
-      'POS ilimitado',
+      'Usuarios ilimitados',
       'KDS cocina + barra',
       'Inventario y recetas',
       '25+ reportes',
@@ -87,10 +89,16 @@ export function getPlan(id: string | null | undefined): Plan | undefined {
 /**
  * Gateable features — the tier differentiators that exist in the product
  * today. The marketing `features` strings above are display-only; THIS is
- * what's actually enforced. Add an id here + a `planAllows` rule when a new
- * pro-only (or basic-and-up) capability ships.
+ * what's actually enforced.
+ *
+ * POS is deliberately NOT here any more. Loyalty earns automatically at the
+ * register, and that's the whole reason to buy RestKit over a standalone
+ * loyalty app — locking it out of the cheapest tier removed the differentiator
+ * from the exact plan that competes on price. Tiers differ by CAPACITY now
+ * (see PLAN_LIMITS): a five-table taquería fits Lite and is happy; a twenty
+ * table restaurant meets the ceiling and upgrades without feeling punished.
  */
-export type FeatureId = 'pos' | 'inventory' | 'kds' | 'reports';
+export type FeatureId = 'inventory' | 'kds' | 'reports';
 
 /** Features NOT included in Básico (Profesional only). */
 const PRO_ONLY: ReadonlySet<FeatureId> = new Set(['inventory', 'kds', 'reports']);
@@ -98,9 +106,35 @@ const PRO_ONLY: ReadonlySet<FeatureId> = new Set(['inventory', 'kds', 'reports']
 /** Whether a given plan tier includes a feature. Pure — no subscription state
  *  here; trial/grandfathering semantics live in lib/subscription.ts. */
 export function planAllows(plan: PlanId, feature: FeatureId): boolean {
-  if (plan === 'lite') return false; // Lite is customers + loyalty only — no gateable feature applies.
-  if (plan === 'basic') return !PRO_ONLY.has(feature);
-  return true; // pro includes everything gateable today
+  if (plan === 'pro') return true;
+  // Lite and Básico share the same feature set; they differ by capacity.
+  return !PRO_ONLY.has(feature);
+}
+
+/* ------------------------------------------------------------- capacity */
+
+/** What a plan can hold. `null` means no ceiling. */
+export interface PlanLimits {
+  tables: number | null;
+  staff: number | null;
+}
+
+export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
+  lite:  { tables: 6, staff: 2 },
+  basic: { tables: null, staff: 10 },
+  pro:   { tables: null, staff: null },
+};
+
+export type LimitId = keyof PlanLimits;
+
+export function limitFor(plan: PlanId, limit: LimitId): number | null {
+  return PLAN_LIMITS[plan][limit];
+}
+
+/** True when creating one more would cross the plan's ceiling. */
+export function wouldExceed(plan: PlanId, limit: LimitId, currentCount: number): boolean {
+  const max = limitFor(plan, limit);
+  return max !== null && currentCount >= max;
 }
 
 /** Per-month price for a plan+period. */

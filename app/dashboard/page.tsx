@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { analyticsService } from "@/services/analytics.service";
-import { capitalize, unitPlural, unitSingular } from "@/lib/loyalty-labels";
+import { capitalize, unitPlural, unitSingular } from "@/lib/loyalty";
 import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
 import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight, Check } from "lucide-react";

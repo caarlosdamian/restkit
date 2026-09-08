@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import { randomBytes } from 'crypto';
 
 export interface ICustomer extends Document {
   name: string;
@@ -7,9 +8,16 @@ export interface ICustomer extends Document {
   businessId: mongoose.Types.ObjectId;
   stats: {
     totalVisits: number;
-    currentVisits: number; // Visits since last reward
-    points: number;
+    /** Stamps since the last redeemed reward. May exceed the required count
+     *  when rewards are earned faster than they're claimed — lib/loyalty.ts
+     *  derives pending rewards and displayed progress from this one number. */
+    currentVisits: number;
+    /** Redeemable cashback in MXN. */
+    cashbackBalance: number;
   };
+  /** Unguessable id for the public card page. Kept separate from
+   *  appleAuthToken, which is a PassKit credential and must not travel in a URL. */
+  publicToken: string;
   externalIds: {
     applePassId?: string;
     appleAuthToken?: string;
@@ -17,6 +25,10 @@ export interface ICustomer extends Document {
   };
   createdAt: Date;
   updatedAt: Date;
+}
+
+export function newPublicToken(): string {
+  return randomBytes(20).toString('hex');
 }
 
 const CustomerSchema: Schema = new Schema(
@@ -33,7 +45,14 @@ const CustomerSchema: Schema = new Schema(
     stats: {
       totalVisits: { type: Number, default: 0 },
       currentVisits: { type: Number, default: 0 },
-      points: { type: Number, default: 0 },
+      cashbackBalance: { type: Number, default: 0 },
+    },
+    publicToken: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      default: newPublicToken,
     },
     externalIds: {
       applePassId: { type: String },
@@ -44,9 +63,18 @@ const CustomerSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Unique customer per business by email or phone if provided
-CustomerSchema.index({ businessId: 1, email: 1 }, { unique: true, sparse: true });
-CustomerSchema.index({ businessId: 1, phone: 1 }, { unique: true, sparse: true });
+// Unique per business by email or phone, but only for customers that actually
+// have one. `sparse` is not enough: a document storing an explicit null still
+// gets indexed, so a second phone-only walk-in collided with the first on
+// (businessId, null). A partial index skips the field unless it's a string.
+CustomerSchema.index(
+  { businessId: 1, email: 1 },
+  { unique: true, partialFilterExpression: { email: { $type: 'string' } } }
+);
+CustomerSchema.index(
+  { businessId: 1, phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $type: 'string' } } }
+);
 
 const Customer: Model<ICustomer> = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
 

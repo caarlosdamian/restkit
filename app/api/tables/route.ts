@@ -5,6 +5,7 @@ import Table from '@/models/Table';
 import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
+import { requireCapacity } from '@/lib/feature-gate';
 
 async function getSession() {
   return auth.api.getSession({ headers: await headers() });
@@ -56,6 +57,13 @@ export async function POST(req: Request) {
   if (!number) return NextResponse.json({ error: 'El número de mesa es requerido' }, { status: 400 });
 
   const businessId = new mongoose.Types.ObjectId(session.user.businessId);
+
+  // Capacity ceiling for the plan. Only counts live tables — a soft-deleted
+  // one has freed its slot.
+  const activeTables = await Table.countDocuments({ businessId, isActive: true });
+  const overLimit = await requireCapacity(businessId, 'tables', activeTables);
+  if (overLimit) return overLimit;
+
   try {
     const table = await Table.create({
       number,

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  limitFor,
+  wouldExceed,
   PLANS,
   getPlan,
   priceFor,
@@ -55,19 +57,54 @@ describe('plan catalog', () => {
 });
 
 describe('planAllows (tier gating)', () => {
-  const GATED: FeatureId[] = ['pos', 'inventory', 'kds', 'reports'];
   const PRO_ONLY: FeatureId[] = ['inventory', 'kds', 'reports'];
 
-  it('lite has none of the gateable features, including POS', () => {
-    for (const f of GATED) expect(planAllows('lite', f)).toBe(false);
+  it('lite and basic share the same feature set', () => {
+    // Tiers differ by capacity now, not by which features unlock.
+    for (const f of PRO_ONLY) {
+      expect(planAllows('lite', f)).toBe(planAllows('basic', f));
+    }
   });
 
-  it('basic includes POS but not the pro-only features', () => {
-    expect(planAllows('basic', 'pos')).toBe(true);
-    for (const f of PRO_ONLY) expect(planAllows('basic', f)).toBe(false);
+  it('keeps inventory, KDS and reports on Profesional', () => {
+    for (const f of PRO_ONLY) {
+      expect(planAllows('lite', f)).toBe(false);
+      expect(planAllows('basic', f)).toBe(false);
+      expect(planAllows('pro', f)).toBe(true);
+    }
   });
 
-  it('pro includes everything gateable', () => {
-    for (const f of GATED) expect(planAllows('pro', f)).toBe(true);
+  it('no longer gates POS at all', () => {
+    // POS was the only thing separating Lite from Básico, which locked the
+    // POS-native loyalty differentiator out of the tier that competes on price.
+    expect((PRO_ONLY as string[]).includes('pos')).toBe(false);
+  });
+});
+
+describe('plan capacity limits', () => {
+  it('caps Lite at a small-café size', () => {
+    expect(limitFor('lite', 'tables')).toBe(6);
+    expect(limitFor('lite', 'staff')).toBe(2);
+  });
+
+  it('lifts the table ceiling from Básico up', () => {
+    expect(limitFor('basic', 'tables')).toBeNull();
+    expect(limitFor('basic', 'staff')).toBe(10);
+  });
+
+  it('leaves Profesional uncapped', () => {
+    expect(limitFor('pro', 'tables')).toBeNull();
+    expect(limitFor('pro', 'staff')).toBeNull();
+  });
+
+  it('reports the ceiling only once it is actually reached', () => {
+    expect(wouldExceed('lite', 'tables', 5)).toBe(false);
+    expect(wouldExceed('lite', 'tables', 6)).toBe(true);
+    expect(wouldExceed('lite', 'tables', 7)).toBe(true);
+  });
+
+  it('never reports a ceiling where there is none', () => {
+    expect(wouldExceed('pro', 'tables', 9999)).toBe(false);
+    expect(wouldExceed('basic', 'tables', 9999)).toBe(false);
   });
 });

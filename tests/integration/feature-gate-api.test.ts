@@ -34,7 +34,7 @@ async function makeBusiness(
   const biz = await Business.create({
     name: 'Tier Test',
     slug: `tier-${oid().toString()}`,
-    settings: { requiredVisits: 10, rewardDescription: 'x' },
+    settings: { loyalty: { sellos: { required: 10, rewardDescription: 'x' } } },
     subscription,
   });
   return biz._id;
@@ -233,18 +233,18 @@ describe('tier gate boundaries — what it must NOT affect', () => {
     expect(res.status).toBe(201);
   });
 
-  it('purchased Lite: menu still works but the register requires an upgrade', async () => {
+  it('purchased Lite: both the menu and the register work', async () => {
     const businessId = await makeBusiness(purchased('lite'));
     signInAs(businessId, 'OWNER');
 
-    // Menu (a non-gated feature) still works…
     expect((await listProducts()).status).toBe(200);
-    // …but Lite doesn't include POS.
+    // POS used to be gated to Básico and up. It isn't any more: loyalty earning
+    // at the register is the differentiator, so every tier gets the register
+    // and the tiers differ by capacity instead (tests/integration/plan-limits-api).
     const res = await startSession(
       jsonRequest('/api/pos-session/start', { method: 'POST', body: { openingBalance: 500 } })
     );
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ code: 'PLAN_UPGRADE_REQUIRED', feature: 'pos' });
+    expect(res.status).toBe(201);
   });
 
   it('expired trial: the access gate (402) still wins over tier logic', async () => {

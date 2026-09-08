@@ -37,8 +37,7 @@ export async function POST(req: Request) {
         logo: 'https://via.placeholder.com/200x50?text=' + encodeURIComponent(restaurantName),
       },
       settings: {
-        requiredVisits: 10,
-        rewardDescription: 'Una bebida gratis',
+        loyalty: { sellos: { required: 10, rewardDescription: 'Una bebida gratis' } },
       },
       ticket: {
         fiscalName: restaurantName + ' S.A. de C.V.',

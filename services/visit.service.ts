@@ -1,69 +1,28 @@
-import { customerRepository } from '@/repositories/customer.repository';
-import { appleDeviceRepository } from '@/repositories/apple-device.repository';
-import { businessRepository } from '@/repositories/business.repository';
-import { sendAppleWalletPush } from '@/lib/apple-push';
-import { updateGoogleWalletObject } from '@/lib/google-wallet';
-import Visit from '@/models/Visit';
-import dbConnect from '@/lib/db';
-import mongoose from 'mongoose';
+import { loyaltyService } from '@/services/loyalty.service';
 
 export const visitService = {
+  /**
+   * Record a visit by hand from the dashboard — the path for a business with
+   * no POS terminal, or a correction. Everything goes through the ledger, so a
+   * hand-recorded visit is reversible exactly like one earned at the register.
+   */
   async recordVisit(customerId: string, businessId: string, employeeId: string) {
-    await dbConnect();
+    const result = await loyaltyService.accrueForOrder({
+      customerId,
+      businessId,
+      employeeId,
+      // No order behind it, so no ticket total and no per-order idempotency.
+      orderTotal: 0,
+      manual: true,
+    });
 
-    const [customer, business] = await Promise.all([
-      customerRepository.findById(customerId, businessId),
-      businessRepository.findById(businessId),
-    ]);
-
-    if (!customer) throw new Error('Customer not found');
-    if (!business) throw new Error('Business not found');
-
-    const required = business.settings.requiredVisits;
-    const newTotal = customer.stats.totalVisits + 1;
-    const newCurrent = customer.stats.currentVisits + 1;
-    const earnedReward = newCurrent >= required;
-
-    await Promise.all([
-      new Visit({
-        customerId: new mongoose.Types.ObjectId(customerId),
-        businessId: new mongoose.Types.ObjectId(businessId),
-        employeeId: new mongoose.Types.ObjectId(employeeId),
-        type: 'VISIT',
-      }).save(),
-      customerRepository.update(customerId, businessId, {
-        stats: {
-          totalVisits: newTotal,
-          currentVisits: earnedReward ? 0 : newCurrent,
-          points: customer.stats.points + 1,
-        },
-      }),
-    ]);
-
-    // Get updated customer for wallet sync
-    const updatedCustomer = await customerRepository.findById(customerId, businessId);
-
-    // Fire-and-forget wallet updates — non-critical
-    // AppleDevice.serialNumber is the customer's own _id (see lib/apple-pass.ts's
-    // pass.json serialNumber + the device registration route), not externalIds.applePassId.
-    if (updatedCustomer) {
-      appleDeviceRepository
-        .findBySerialNumber(customerId)
-        .then((devices) =>
-          Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken)))
-        )
-        .catch((err) => console.error('APNs push error:', err));
-    }
-
-    if (updatedCustomer) {
-      updateGoogleWalletObject(updatedCustomer, business)
-        .catch((err) => console.error('Google Wallet update error:', err));
-    }
+    if (!result) throw new Error('Customer not found');
 
     return {
-      earnedReward,
-      totalVisits: newTotal,
-      currentVisits: earnedReward ? 0 : newCurrent,
+      earnedReward: result.justEarnedReward,
+      totalVisits: result.currentVisits,
+      currentVisits: result.currentVisits,
+      rewardsPending: result.rewardsPending,
     };
   },
 };

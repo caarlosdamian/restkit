@@ -44,7 +44,7 @@ async function makeBusiness(extra: Record<string, unknown> = {}) {
   return Business.create({
     name: 'Negocio Test',
     slug: `neg-${oid().toString()}`,
-    settings: { requiredVisits: 10, rewardDescription: 'x' },
+    settings: { loyalty: { sellos: { required: 10, rewardDescription: 'x' } } },
     subscription: { status: 'trialing', trialEndsAt: new Date(), ...extra },
   });
 }

@@ -23,6 +23,22 @@ export interface ReceiptData {
   /** Pre-bill ("cuenta") to hand to the customer before paying — no ticket
    *  number, no payment section, and marked as not a proof of payment. */
   preliminary?: boolean;
+  /** Cashback spent on this bill. `total` stays gross; this comes off it. */
+  cashbackApplied?: number;
+  /** Loyalty block printed under the total. The QR is how a customer enrolled
+   *  at the register actually gets the pass onto their phone — they scan it
+   *  from the paper on their way out. */
+  loyalty?: {
+    name: string;
+    cardUrl?: string;
+    qrDataUrl?: string;
+    mechanic?: 'sellos' | 'cashback';
+    stamps?: number;
+    required?: number;
+    balance?: number;
+    rewardReady?: boolean;
+    unitPlural?: string;
+  };
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -118,6 +134,10 @@ export function generateReceiptHtml(data: ReceiptData): string {
   }
   lines.push(DASH);
   lines.push(row('TOTAL:', `$${data.total.toFixed(2)}`));
+  if (data.cashbackApplied && data.cashbackApplied > 0) {
+    lines.push(row('Saldo aplicado:', `-$${data.cashbackApplied.toFixed(2)}`));
+    lines.push(row('A PAGAR:', `$${(data.total - data.cashbackApplied).toFixed(2)}`));
+  }
   lines.push(DIV);
 
   // ── IVA breakdown (prices already include IVA) ──
@@ -140,13 +160,41 @@ export function generateReceiptHtml(data: ReceiptData): string {
     }
     lines.push(DIV);
   }
+  // ── Loyalty card ──
+  const loyalty = data.loyalty;
+  if (loyalty && !data.preliminary) {
+    lines.push(center('TU TARJETA DE FIDELIDAD'));
+    if (loyalty.rewardReady) {
+      lines.push(center('*** PREMIO LISTO ***'));
+    } else if (loyalty.mechanic === 'cashback') {
+      lines.push(center(`Saldo: $${(loyalty.balance ?? 0).toFixed(2)}`));
+    } else if (loyalty.required) {
+      const filled = loyalty.stamps ?? 0;
+      // A row of dots reads as a punch card even in monospace on 80mm paper.
+      lines.push(center('*'.repeat(filled) + '.'.repeat(Math.max(0, loyalty.required - filled))));
+      lines.push(center(`${filled} de ${loyalty.required} ${loyalty.unitPlural ?? 'visitas'}`));
+    }
+    lines.push('');
+    lines.push('@@QR@@');
+    lines.push(center('Escanea para guardarla'));
+    lines.push(center('en tu Wallet'));
+    lines.push(DIV);
+  }
+
   lines.push('');
   lines.push(center(footer));
   if (!data.preliminary) lines.push(center('Comprobante no fiscal'));
   lines.push('');
 
   const body = lines
-    .map((l) => `<div>${l.replace(/ /g, '&nbsp;').replace(/─/g, '&#x2500;')}</div>`)
+    .map((l) => {
+      if (l === '@@QR@@') {
+        return data.loyalty?.qrDataUrl
+          ? `<div class="qr"><img src="${data.loyalty.qrDataUrl}" alt="" /></div>`
+          : '';
+      }
+      return `<div>${l.replace(/ /g, '&nbsp;').replace(/─/g, '&#x2500;')}</div>`;
+    })
     .join('\n');
 
   return `<!DOCTYPE html>
@@ -166,6 +214,15 @@ export function generateReceiptHtml(data: ReceiptData): string {
       color: #000;
     }
     div { white-space: pre; }
+    /* The QR has to survive a thermal printer: no antialiasing, generous
+       quiet zone, and big enough that a phone locks on from the paper. */
+    .qr { white-space: normal; text-align: center; margin: 2mm 0; }
+    .qr img {
+      width: 32mm; height: 32mm;
+      image-rendering: pixelated;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
     @media print {
       @page { margin: 0; size: 80mm auto; }
       html, body { width: 80mm; }

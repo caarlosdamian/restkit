@@ -1,4 +1,5 @@
 import { customerRepository } from "@/repositories/customer.repository";
+import { newPublicToken } from "@/models/Customer";
 import dbConnect from "@/lib/db";
 import { randomBytes } from "crypto";
 import mongoose from "mongoose";
@@ -14,7 +15,8 @@ export const customerService = {
     return await customerRepository.create({
       ...data,
       businessId: new mongoose.Types.ObjectId(businessId),
-      stats: { totalVisits: 0, currentVisits: 0, points: 0 },
+      stats: { totalVisits: 0, currentVisits: 0, cashbackBalance: 0 },
+      publicToken: newPublicToken(),
       externalIds: { appleAuthToken: randomBytes(20).toString('hex') },
     });
   },

@@ -1,9 +1,14 @@
 import { PKPass } from 'passkit-generator';
 import sharp from 'sharp';
 import { solidColorPNG } from './png';
-import { unitPlural } from './loyalty-labels';
+import { loyaltyConfig, stampState, formatMXN } from './loyalty';
+import { buildCardLayout } from './card-layout';
+import { groundFor, readableInk, relLuminance } from './card-colors';
+import { renderStripVariants } from './strip-render';
+import { findStampIcon } from './stamp-icons';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
+import { readAsset } from './storage';
 
 // Apple's design guide caps the logo at 160x50pt (1x); @2x/@3x are the same
 // box scaled up. `fit: 'inside'` preserves aspect ratio without cropping.
@@ -11,9 +16,8 @@ async function fetchLogoVariants(
   logoUrl: string
 ): Promise<{ '1x': Buffer; '2x': Buffer; '3x': Buffer } | null> {
   try {
-    const res = await fetch(logoUrl);
-    if (!res.ok) return null;
-    const input = Buffer.from(await res.arrayBuffer());
+    const input = await readAsset(logoUrl);
+    if (!input) return null;
     const scaled = (scale: number) =>
       sharp(input)
         .resize({ width: 160 * scale, height: 50 * scale, fit: 'inside' })
@@ -40,6 +44,34 @@ function cssRgb(r: number, g: number, b: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
+/** The pass icon is what the customer sees in the notification when a stamp
+ *  lands, so it draws the business's own stamp mark rather than a flat square. */
+async function iconVariants(
+  iconId: string,
+  bg: string
+): Promise<{ 1: Buffer; 2: Buffer; 3: Buffer } | null> {
+  try {
+    const icon = findStampIcon(iconId);
+    // White on the brand colour was invisible for a pale brand — and this icon
+    // IS the notification a customer sees when a stamp lands, so it gets the
+    // same contrast treatment as the stamps themselves.
+    const stroke = relLuminance(bg) < 0.5 ? '#ffffff' : readableInk(bg, bg);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="87" height="87" viewBox="0 0 87 87">
+  <rect width="87" height="87" rx="18" fill="${bg}"/>
+  <g transform="translate(19.5 19.5) scale(2)">
+    <path d="${icon.d}" fill="none" stroke="${stroke}" stroke-width="2.4"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>`;
+    const at = (px: number) => sharp(Buffer.from(svg)).resize(px, px).png().toBuffer();
+    const [x1, x2, x3] = await Promise.all([at(29), at(58), at(87)]);
+    return { 1: x1, 2: x2, 3: x3 };
+  } catch (err) {
+    console.error('Apple pass icon render failed:', err);
+    return null;
+  }
+}
+
 export async function generateApplePass(
   customer: ICustomer,
   business: IBusiness
@@ -58,21 +90,61 @@ export async function generateApplePass(
 
   const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   const primaryColor = business.branding?.primaryColor || '#4f46e5';
-  const [r, g, b] = hexToRgb(primaryColor);
-
-  // Pick foreground color based on luminance
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  const fg = lum > 0.5 ? cssRgb(0, 0, 0) : cssRgb(255, 255, 255);
-  const label = lum > 0.5 ? cssRgb(80, 80, 80) : cssRgb(200, 200, 200);
 
   const serialNumber = (customer._id as { toString(): string }).toString();
-  const authToken = customer.externalIds?.appleAuthToken || serialNumber;
-  const { totalVisits, currentVisits } = customer.stats;
-  const required = business.settings.requiredVisits;
+  // Falling back to the serial would mint a pass whose token can never match
+  // what the web service checks — permanently un-updatable. Fail loudly instead.
+  const authToken = customer.externalIds?.appleAuthToken;
+  if (!authToken) {
+    throw new Error(
+      `Customer ${serialNumber} has no appleAuthToken; refusing to issue an un-updatable pass.`
+    );
+  }
 
-  const logoVariants = business.branding?.logo
-    ? await fetchLogoVariants(business.branding.logo)
-    : null;
+  const { currentVisits } = customer.stats;
+  const config = loyaltyConfig(business);
+  const required = config.sellos.required;
+  const state = stampState(currentVisits, required);
+  const isCashback = config.mechanic === 'cashback';
+
+  // The pass chrome takes the SAME ground the strip is drawn on, so the card
+  // reads as one object. Painting the pass in the raw brand colour while the
+  // strip sat on white put a hard seam across the middle of every card.
+  const cardGround = groundFor(config.card.ground, primaryColor);
+  const [r, g, b] = hexToRgb(cardGround);
+  const onDark = relLuminance(cardGround) < 0.4;
+  const fg = onDark ? cssRgb(255, 255, 255) : cssRgb(20, 26, 33);
+  const label = onDark ? cssRgb(214, 219, 224) : cssRgb(94, 104, 116);
+
+  const layout = buildCardLayout(
+    {
+      businessName: business.name,
+      config,
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        createdAt: (customer as { createdAt?: Date }).createdAt,
+        stats: customer.stats,
+      },
+      // A storeCard always ships a strip here, so primaryFields stay empty.
+      hasStrip: true,
+    },
+    config.card.fields
+  );
+
+  const [logoVariants, stripVariants, icons] = await Promise.all([
+    business.branding?.logo ? fetchLogoVariants(business.branding.logo) : Promise.resolve(null),
+    renderStripVariants({
+      currentVisits,
+      cashbackBalance: customer.stats.cashbackBalance ?? 0,
+      config,
+      brandColor: primaryColor,
+      backgroundUrl: config.card.stripImage,
+      customIconUrl: config.card.customIconUrl,
+    }),
+    iconVariants(config.card.stampIcon, primaryColor),
+  ]);
 
   const passJson = {
     formatVersion: 1,
@@ -90,62 +162,50 @@ export async function generateApplePass(
     webServiceURL: `${appUrl}/api/wallet/apple`,
     authenticationToken: authToken,
     storeCard: {
-      primaryFields: [
-        {
-          key: 'visits',
-          label: unitPlural(business).toUpperCase(),
-          value: `${currentVisits} de ${required}`,
-          // Avoids gendered participles ("nueva"/"nuevo") since the unit noun is
-          // business-configurable and its grammatical gender isn't known.
-          changeMessage: `Registro actualizado. Ahora tienes %@ ${unitPlural(business)}.`,
-        },
-      ],
-      secondaryFields: [
-        {
-          key: 'name',
-          label: 'CLIENTE',
-          value: customer.name,
-        },
-      ],
-      auxiliaryFields: [
-        {
-          key: 'reward',
-          label: 'PREMIO',
-          value: business.settings.rewardDescription,
-        },
-      ],
-      backFields: [
-        {
-          key: 'totalVisits',
-          label: `Total de ${unitPlural(business)}`,
-          value: String(totalVisits),
-        },
-        {
-          key: 'contact',
-          label: 'Contacto',
-          value: customer.email || customer.phone || '',
-        },
-      ],
+      headerFields: layout.header,
+      // EMPTY ON PURPOSE. Wallet draws primaryFields on top of strip.png, and
+      // strip.png is the stamp card — a populated primary slot reprints the
+      // progress across the customer's own stamps.
+      primaryFields: [],
+      secondaryFields: layout.secondary,
+      auxiliaryFields: layout.auxiliary,
+      backFields: layout.back,
     },
     barcodes: [
       {
-        message: serialNumber,
+        // The opaque token, never the raw ObjectId — ObjectIds are sequential
+        // enough that one leaked id opens a path to guessing its neighbours.
+        message: `${appUrl}/c/${customer.publicToken}`,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
         altText: customer.name,
       },
     ],
+    ...(config.location?.latitude != null && config.location?.longitude != null
+      ? {
+          locations: [
+            {
+              latitude: config.location.latitude,
+              longitude: config.location.longitude,
+              relevantText:
+                config.location.relevantText ||
+                (isCashback
+                  ? `Tienes ${formatMXN(customer.stats.cashbackBalance ?? 0)} de saldo`
+                  : `Llevas ${state.stamps} de ${required} ${config.sellos.unitPlural}`),
+            },
+          ],
+        }
+      : {}),
   };
-
-  const icon = solidColorPNG(29, 29, r, g, b);
-  const icon2x = solidColorPNG(58, 58, r, g, b);
-  const icon3x = solidColorPNG(87, 87, r, g, b);
 
   const files: Record<string, Buffer> = {
     'pass.json': Buffer.from(JSON.stringify(passJson)),
-    'icon.png': icon,
-    'icon@2x.png': icon2x,
-    'icon@3x.png': icon3x,
+    'icon.png': icons?.[1] ?? solidColorPNG(29, 29, r, g, b),
+    'icon@2x.png': icons?.[2] ?? solidColorPNG(58, 58, r, g, b),
+    'icon@3x.png': icons?.[3] ?? solidColorPNG(87, 87, r, g, b),
+    'strip.png': stripVariants['1x'],
+    'strip@2x.png': stripVariants['2x'],
+    'strip@3x.png': stripVariants['3x'],
   };
 
   if (logoVariants) {

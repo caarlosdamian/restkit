@@ -15,6 +15,15 @@
 
 # next.js
 /.next/
+
+# locally-stored brand assets (dev fallback for Vercel Blob)
+/.uploads/
+
+# intermediate from docs/APPLE_WALLET_SETUP.md — its contents go into
+# APPLE_WWDR_CERT_BASE64, never into the repo
+wwdr.b64
+*.pem
+*.p12
 /out/
 
 # production

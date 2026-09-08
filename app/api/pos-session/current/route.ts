@@ -3,6 +3,7 @@ import POSSession from '@/models/POSSession';
 import Order from '@/models/Order';
 import dbConnect from '@/lib/db';
 import { getBusinessContext } from '@/lib/pos-auth';
+import { sessionTotals } from '@/lib/session-totals';
 
 export async function GET() {
   const ctx = await getBusinessContext();
@@ -27,19 +28,7 @@ export async function GET() {
     closedAt: { $gte: posSession.startedAt },
   });
 
-  const totals = {
-    cashSales: 0,
-    cardSales: 0,
-    transferSales: 0,
-    totalSales: 0,
-  };
-
-  paidOrders.forEach((order) => {
-    if (order.paymentMethod === 'CASH') totals.cashSales += order.total;
-    else if (order.paymentMethod === 'CARD') totals.cardSales += order.total;
-    else if (order.paymentMethod === 'TRANSFER') totals.transferSales += order.total;
-    totals.totalSales += order.total;
-  });
+  const totals = sessionTotals(paidOrders);
 
   return NextResponse.json({
     session: {
@@ -52,6 +41,7 @@ export async function GET() {
       cashSales: totals.cashSales,
       cardSales: totals.cardSales,
       transferSales: totals.transferSales,
+      cashbackRedeemed: totals.cashbackRedeemed,
     },
   });
 }

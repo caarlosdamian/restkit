@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import dbConnect from "@/lib/db";
 import { businessRepository } from "@/repositories/business.repository";
 import SettingsForm from "@/components/settings/SettingsForm";
+import { assetSrc } from "@/lib/storage";
 
 export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -28,13 +29,7 @@ export default async function SettingsPage() {
           name: business.name,
           branding: {
             primaryColor: business.branding?.primaryColor ?? "#10b981",
-            logo: business.branding?.logo,
-          },
-          settings: {
-            requiredVisits: business.settings?.requiredVisits ?? 10,
-            rewardDescription: business.settings?.rewardDescription ?? "",
-            unitSingular: business.settings?.unitSingular ?? "visita",
-            unitPlural: business.settings?.unitPlural ?? "visitas",
+            logo: assetSrc(business.branding?.logo),
           },
           ticket: {
             fiscalName:    business.ticket?.fiscalName,

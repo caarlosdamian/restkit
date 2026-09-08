@@ -28,8 +28,7 @@ export async function POST(req: Request) {
           logo: 'https://via.placeholder.com/200x50?text=RestKit',
         },
         settings: {
-          requiredVisits: 10,
-          rewardDescription: 'Un café o postre gratis',
+          loyalty: { sellos: { required: 10, rewardDescription: 'Un café o postre gratis' } },
         },
         ticket: {
           fiscalName: 'RestKit MX S.A. de C.V.',

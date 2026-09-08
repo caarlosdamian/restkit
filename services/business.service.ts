@@ -3,6 +3,7 @@ import dbConnect from "@/lib/db";
 import { auth } from "@/lib/auth";
 import mongoose from "mongoose";
 import { TRIAL_DAYS, toPlanId, toBillingPeriod } from "@/lib/plans";
+import { DEFAULT_LOYALTY } from "@/lib/loyalty";
 
 export const businessService = {
   async registerBusinessAndOwner(data: {
@@ -43,10 +44,10 @@ export const businessService = {
           logo: undefined,
         },
         settings: {
-          requiredVisits: 10,
-          rewardDescription: "¡Un café gratis!",
-          unitSingular: "visita",
-          unitPlural: "visitas",
+          loyalty: {
+            ...DEFAULT_LOYALTY,
+            sellos: { ...DEFAULT_LOYALTY.sellos, rewardDescription: "¡Un café gratis!" },
+          },
         },
         ticket: {
           fiscalName: data.businessName,
