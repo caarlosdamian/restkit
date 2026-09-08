@@ -3,14 +3,17 @@ import { headers } from 'next/headers';
 import dbConnect from '@/lib/db';
 import { customerService } from '@/services/customer.service';
 import { businessRepository } from '@/repositories/business.repository';
-import { capitalize, unitSingular, unitPlural } from '@/lib/loyalty-labels';
+import { capitalize, unitSingular, unitPlural, loyaltyConfig, stampState, formatMXN } from '@/lib/loyalty';
+import { loyaltyService } from '@/services/loyalty.service';
+import CustomerHistory from '@/components/dashboard/CustomerHistory';
+import { qrDataUrl } from '@/lib/qr';
 import RecordVisitButton from '@/components/dashboard/RecordVisitButton';
 import EditCustomerButton from '@/components/dashboard/EditCustomerButton';
 import { AppleWallet } from '@/components/appleWallet/AppleWallet';
 import GoogleWallet from '@/components/dashboard/GoogleWallet';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ScanLine, Star, QrCode } from 'lucide-react';
+import { ArrowLeft, ScanLine, Gift, QrCode, Wallet } from 'lucide-react';
 
 export default async function CustomerDetailPage({
   params,
@@ -33,16 +36,21 @@ export default async function CustomerDetailPage({
   if (!customer || !business) notFound();
 
   const customerId = customer._id.toString();
-  const required = business.settings.requiredVisits;
-  const current = customer.stats.currentVisits;
+  const config = loyaltyConfig(business);
+  const required = config.sellos.required;
+  const state = stampState(customer.stats.currentVisits, required);
+  const current = state.stamps;
   const progressPct = Math.min((current / required) * 100, 100);
   const singular = unitSingular(business);
   const plural = unitPlural(business);
+  const isCashback = config.mechanic === 'cashback';
+
+  const history = await loyaltyService.history(customerId, session.user.businessId, 0, 10);
 
   const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  const publicUrl = `${appUrl}/c/${customerId}`;
+  const publicUrl = `${appUrl}/c/${customer.publicToken}`;
   const passUrl = `/api/passes/apple/${customerId}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&format=svg&data=${encodeURIComponent(publicUrl)}`;
+  const qrUrl = await qrDataUrl(publicUrl, 200);
 
   return (
     <div className="space-y-8 max-w-2xl">
@@ -95,11 +103,17 @@ export default async function CustomerDetailPage({
         <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-              <Star size={18} />
+              {isCashback ? <Wallet size={18} /> : <Gift size={18} />}
             </div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Puntos</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              {isCashback ? 'Saldo' : 'Premios por canjear'}
+            </p>
           </div>
-          <p className="text-4xl font-extrabold tracking-tight text-gray-900">{customer.stats.points}</p>
+          <p className="text-4xl font-extrabold tracking-tight text-gray-900">
+            {isCashback
+              ? formatMXN(customer.stats.cashbackBalance ?? 0)
+              : state.rewardsPending}
+          </p>
         </div>
       </div>
 
@@ -118,9 +132,14 @@ export default async function CustomerDetailPage({
         </div>
         <p className="mt-3 text-sm text-gray-500">
           Premio:{' '}
-          <span className="font-semibold text-gray-900">{business.settings.rewardDescription}</span>
+          <span className="font-semibold text-gray-900">{config.sellos.rewardDescription}</span>
         </p>
       </div>
+
+      <CustomerHistory
+        customerId={customerId}
+        initial={JSON.parse(JSON.stringify(history))}
+      />
 
       {/* Digital card / QR */}
       <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-6 space-y-6">

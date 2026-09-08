@@ -1,68 +1,64 @@
 import Customer from '@/models/Customer';
 import { businessRepository } from '@/repositories/business.repository';
-import { unitPlural } from '@/lib/loyalty-labels';
+import { loyaltyConfig } from '@/lib/loyalty';
+import { assetSrc } from '@/lib/storage';
+import { qrDataUrl } from '@/lib/qr';
+import LoyaltyCard from '@/components/loyalty/LoyaltyCard';
 import dbConnect from '@/lib/db';
 import { notFound } from 'next/navigation';
 
 export default async function CustomerPassPage({
   params,
 }: {
-  params: Promise<{ customerId: string }>;
+  params: Promise<{ token: string }>;
 }) {
-  const { customerId } = await params;
+  const { token } = await params;
 
   await dbConnect();
-  const customer = await Customer.findById(customerId).select(
+  // Looked up by the opaque token, never by _id. ObjectIds are sequential
+  // enough that one leaked from a receipt opens a path to guessing the rest.
+  const customer = await Customer.findOne({ publicToken: token }).select(
     'name stats businessId externalIds'
   );
   if (!customer) notFound();
+
+  const customerId = String(customer._id);
 
   const business = await businessRepository.findById(
     customer.businessId.toString()
   );
   if (!business) notFound();
 
-  const current = customer.stats.currentVisits;
-  const required = business.settings.requiredVisits;
-  const pct = Math.min((current / required) * 100, 100);
+  const config = loyaltyConfig(business);
   const primaryColor = business.branding?.primaryColor || '#4f46e5';
-  const plural = unitPlural(business);
+
+  // The same value the wallet pass encodes in its barcode, so the card on this
+  // page and the one in the customer's wallet carry the same code.
+  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const qr = await qrDataUrl(`${appUrl}/c/${token}`, 400);
 
   const googleUrl = `/api/passes/google/${customerId}`;
   const appleUrl = `/api/passes/apple/${customerId}`;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-sm space-y-6">
-        {/* Card */}
-        <div
-          className="rounded-2xl p-6 text-white shadow-lg"
-          style={{ backgroundColor: primaryColor }}
-        >
-          <p className="text-sm font-medium opacity-75">{business.name}</p>
-          <h1 className="mt-1 text-2xl font-bold">Hola, {customer.name}</h1>
-
-          <div className="mt-6">
-            <div className="flex items-end justify-between">
-              <span className="text-4xl font-bold">{current}</span>
-              <span className="mb-1 text-lg opacity-75">/ {required} {plural}</span>
-            </div>
-            <div className="mt-2 h-2.5 w-full rounded-full bg-white/30">
-              <div
-                className="h-2.5 rounded-full bg-white transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="mt-3 text-sm opacity-80">
-              Premio: <span className="font-semibold">{business.settings.rewardDescription}</span>
-            </p>
-          </div>
-        </div>
+        <LoyaltyCard
+          businessName={business.name}
+          logo={assetSrc(business.branding?.logo)}
+          photo={assetSrc(config.card.stripImage)}
+          customerName={customer.name}
+          config={config}
+          brandColor={primaryColor}
+          currentVisits={customer.stats.currentVisits}
+          cashbackBalance={customer.stats.cashbackBalance ?? 0}
+          qrDataUrl={qr}
+        />
 
         {/* Wallet buttons */}
         <div className="space-y-3">
           <p className="text-center text-sm text-gray-500">
-            Guarda tu tarjeta en tu wallet
+            Guárdala en tu wallet y se actualiza sola en cada compra
           </p>
 
           {/* Google Wallet */}

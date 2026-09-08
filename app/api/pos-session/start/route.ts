@@ -5,7 +5,6 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext, isManager } from '@/lib/pos-auth';
 import { evaluateSubscription } from '@/lib/subscription';
-import { requireFeature } from '@/lib/feature-gate';
 
 export async function POST(req: Request) {
   const ctx = await getBusinessContext();
@@ -26,9 +25,9 @@ export async function POST(req: Request) {
     );
   }
 
-  // Lite is customers + loyalty only — POS starts at Básico.
-  const denied = await requireFeature(ctx.businessId, 'pos');
-  if (denied) return denied;
+  // POS is in every tier now: automatic loyalty at the register is the reason
+  // to buy RestKit, and gating it out of Lite removed that from the plan that
+  // competes on price. Plans differ by capacity — see lib/plans.ts PLAN_LIMITS.
 
   const { openingBalance } = await req.json();
 

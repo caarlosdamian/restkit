@@ -11,6 +11,8 @@ export interface CashCutData {
   totalSales: number;
   totalOrders: number;
   cashSales: number;
+  /** Balance spent instead of money — shown so gross and collected reconcile. */
+  cashbackRedeemed?: number;
   cardSales: number;
   transferSales: number;
   expectedCash: number;
@@ -61,6 +63,10 @@ export function generateCashCutHtml(data: CashCutData): string {
   lines.push(row('Efectivo:', `$${data.cashSales.toFixed(2)}`));
   lines.push(row('Tarjeta:', `$${data.cardSales.toFixed(2)}`));
   lines.push(row('Transferencia:', `$${data.transferSales.toFixed(2)}`));
+  // Without this line the cobrado and the gross look like they disagree.
+  if (data.cashbackRedeemed && data.cashbackRedeemed > 0) {
+    lines.push(row('Saldo de clientes:', `$${data.cashbackRedeemed.toFixed(2)}`));
+  }
   lines.push(DASH);
   lines.push(row('TOTAL VENTAS:', `$${data.totalSales.toFixed(2)}`));
   lines.push(row('Órdenes:', `${data.totalOrders}`));

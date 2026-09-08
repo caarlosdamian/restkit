@@ -7,6 +7,11 @@ import mongoose from 'mongoose';
 import { getBusinessContext } from '@/lib/pos-auth';
 import { verifyWaiterToken, signWaiterToken } from '@/lib/waiter-token';
 import { inventoryService } from '@/services/inventory.service';
+import { loyaltyService } from '@/services/loyalty.service';
+import Customer from '@/models/Customer';
+import Business from '@/models/Business';
+import { loyaltyConfig, stampState } from '@/lib/loyalty';
+import { qrDataUrl } from '@/lib/qr';
 
 type Params = Promise<{ orderId: string }>;
 
@@ -65,9 +70,20 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     );
   }
 
+  // Attaching the loyalty customer is allowed right up to payment, and is the
+  // only moment the cashier has both the bill and the customer's attention.
+  if (body.customerId !== undefined) {
+    order.customerId = body.customerId
+      ? new mongoose.Types.ObjectId(String(body.customerId))
+      : undefined;
+  }
+
   // Set once below if this request is the one that flips the order to PAID,
   // so we deduct inventory exactly once, after the order itself is saved.
   let deductInventory = false;
+  // Likewise for loyalty: the ledger's unique index is the real guard, this
+  // just avoids the round-trip on every other PATCH.
+  let accrueLoyalty = false;
 
   if (body.status) {
     order.status = body.status;
@@ -79,15 +95,50 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
       // Generate a short ticket number from the ObjectId
       order.ticketNumber = order._id.toString().slice(-6).toUpperCase();
       if (body.paymentMethod) order.paymentMethod = body.paymentMethod;
+
+      // Cashback spent on this bill. `total` stays gross; the customer owes
+      // the difference, and that difference is what the drawer expects.
+      if (order.customerId && body.cashbackApplied != null) {
+        try {
+          order.cashbackApplied = await loyaltyService.redeemCashback({
+            customerId: String(order.customerId),
+            businessId: ctx.businessIdStr,
+            employeeId: String(actingStaffId),
+            orderTotal: order.total,
+            requested: Number(body.cashbackApplied),
+            orderId: order._id,
+          });
+        } catch (err) {
+          console.error('Cashback redemption failed for order', String(order._id), err);
+        }
+      }
+
+      // Claiming a completed stamp card.
+      if (order.customerId && body.redeemReward) {
+        try {
+          await loyaltyService.redeemReward({
+            customerId: String(order.customerId),
+            businessId: ctx.businessIdStr,
+            employeeId: String(actingStaffId),
+            orderId: order._id,
+          });
+          order.rewardRedeemed = true;
+        } catch (err) {
+          console.error('Reward redemption failed for order', String(order._id), err);
+        }
+      }
+
+      const due = Math.max(0, order.total - (order.cashbackApplied ?? 0));
       if (body.amountReceived != null) {
         order.amountReceived = Number(body.amountReceived);
-        order.change = Math.max(0, Number(body.amountReceived) - order.total);
+        order.change = Math.max(0, Number(body.amountReceived) - due);
       }
       // Guard against double-deduction if PAID is re-applied (e.g. a retried PATCH).
       if (!order.inventoryDeducted) {
         deductInventory = true;
         order.inventoryDeducted = true;
       }
+      if (order.customerId) accrueLoyalty = true;
     }
     // Free the table when the order closes (paid or cancelled).
     if (body.status === 'PAID' || body.status === 'CANCELLED') {
@@ -117,7 +168,45 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     }
   }
 
-  const res = NextResponse.json(order);
+  // After the order is safely saved: a loyalty failure must never fail a
+  // payment that already went through.
+  let loyalty = null;
+  if (accrueLoyalty && order.customerId) {
+    try {
+      const result = await loyaltyService.accrueForOrder({
+        customerId: String(order.customerId),
+        businessId: ctx.businessIdStr,
+        employeeId: String(actingStaffId),
+        orderId: order._id,
+        orderTotal: order.total,
+        tableName: order.tableName,
+      });
+
+      if (result) {
+        // The card link goes on the ticket, so a walk-in enrolled at the
+        // register leaves with a way to add the pass.
+        const customer = await Customer.findById(order.customerId).select('publicToken');
+        const business = await Business.findById(ctx.businessId).select('settings');
+        const config = loyaltyConfig(business);
+        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+        const cardUrl = customer ? `${appUrl}/c/${customer.publicToken}` : undefined;
+
+        loyalty = {
+          ...result,
+          required: config.sellos.required,
+          stamps: stampState(result.currentVisits, config.sellos.required).stamps,
+          rewardDescription: config.sellos.rewardDescription,
+          unitPlural: config.sellos.unitPlural,
+          cardUrl,
+          qrDataUrl: cardUrl ? await qrDataUrl(cardUrl, 160) : undefined,
+        };
+      }
+    } catch (err) {
+      console.error('Loyalty accrual failed for order', String(order._id), err);
+    }
+  }
+
+  const res = NextResponse.json(loyalty ? { ...order.toObject(), loyalty } : order);
   if (waiter) {
     res.headers.set(
       'x-waiter-token',

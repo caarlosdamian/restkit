@@ -21,6 +21,9 @@ export interface IPOSSession extends Document {
   cashSales: number;
   cardSales: number;
   transferSales: number;
+  /** Balance spent instead of money. Bridges gross sales and cash collected,
+   *  so a redemption never reads as a shortfall in the drawer. */
+  cashbackRedeemed: number;
 
   // Session status
   status: 'OPEN' | 'CLOSED';    // Current state
@@ -64,6 +67,7 @@ const POSSessionSchema = new Schema<IPOSSession>(
     cashSales: { type: Number, default: 0 },
     cardSales: { type: Number, default: 0 },
     transferSales: { type: Number, default: 0 },
+    cashbackRedeemed: { type: Number, default: 0 },
 
     status: {
       type: String,

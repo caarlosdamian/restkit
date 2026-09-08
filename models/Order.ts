@@ -30,6 +30,13 @@ export interface IOrder extends Document {
   change?: number;
   ticketNumber?: string;
   closedAt?: Date;
+  /** Loyalty customer attached at cobro. Absent for anonymous orders. */
+  customerId?: mongoose.Types.ObjectId;
+  /** MXN taken off this order from the customer's cashback balance. `total`
+   *  stays the gross amount; the customer pays `total - cashbackApplied`. */
+  cashbackApplied?: number;
+  /** A completed stamp card was claimed on this order. */
+  rewardRedeemed?: boolean;
   /** When the ticket first entered the kitchen — drives KDS FIFO + aging timer. */
   kitchenAt?: Date;
   /** True once inventory has been deducted for this order (PAID transition).
@@ -71,6 +78,9 @@ const OrderSchema = new Schema<IOrder>(
     change: { type: Number },
     ticketNumber: { type: String },
     closedAt: { type: Date },
+    customerId: { type: Schema.Types.ObjectId, ref: 'Customer', index: true },
+    cashbackApplied: { type: Number },
+    rewardRedeemed: { type: Boolean },
     kitchenAt: { type: Date },
     inventoryDeducted: { type: Boolean, default: false },
   },

@@ -15,7 +15,7 @@ import {
   Home, Users, Settings, UserCog, Gift,
   ChefHat, Package, ClipboardList,
   BarChart3, FileText, Truck, UtensilsCrossed,
-  ShoppingCart, ExternalLink, LayoutGrid, CreditCard,
+  ShoppingCart, ExternalLink, LayoutGrid, CreditCard, ScanLine,
 } from "lucide-react";
 
 export default async function DashboardLayout({
@@ -48,7 +48,6 @@ export default async function DashboardLayout({
   const hasInventory = featureAllowed(subscription, "inventory");
   const hasReports = featureAllowed(subscription, "reports");
   const hasKds = featureAllowed(subscription, "kds");
-  const hasPos = featureAllowed(subscription, "pos");
   const planName = subscription?.plan ? getPlan(subscription.plan)?.name : undefined;
   const pathname = hdrs.get("x-pathname") || "";
   const onBillingPage = pathname.startsWith("/dashboard/billing");
@@ -83,7 +82,6 @@ export default async function DashboardLayout({
           >
             <ShoppingCart size={17} className="shrink-0" />
             Abrir POS
-            {!hasPos && <TierBadge tier="Básico" />}
             <ExternalLink size={13} className="ml-auto text-emerald-400" />
           </a>
 
@@ -98,6 +96,20 @@ export default async function DashboardLayout({
             Cocina (KDS)
             {!hasKds && <TierBadge tier="Pro" />}
             <ExternalLink size={13} className="ml-auto text-amber-400" />
+          </a>
+
+          {/* Scanner — its own surface, not /pos: a business that kept its own
+              register must never have to open a till screen to stamp a card.
+              Opens in a tab so it can live on a phone at the counter. */}
+          <a
+            href="/scan"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 transition-colors no-underline"
+          >
+            <ScanLine size={17} className="shrink-0" />
+            Escanear tarjeta
+            <ExternalLink size={13} className="ml-auto text-sky-400" />
           </a>
 
           <NavLink href="/dashboard/customers" icon={Users} label="Clientes" />

@@ -7,6 +7,9 @@ import { UserPlus, X, Check, CheckCircle2 } from "lucide-react";
 export default function AddStaffForm() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Running out of seats means the business grew, so it gets a route forward
+  // rather than a red error box.
+  const [atPlanLimit, setAtPlanLimit] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [role, setRole] = useState("STAFF");
@@ -49,7 +52,11 @@ export default function AddStaffForm() {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Error al crear empleado");
+      if (!res.ok) {
+        setAtPlanLimit(data.code === "PLAN_LIMIT_REACHED");
+        throw new Error(data.error || "Error al crear empleado");
+      }
+      setAtPlanLimit(false);
       setSuccess(`${name} fue agregado exitosamente`);
       setError("");
       // Reset form and reload page after brief delay
@@ -209,7 +216,19 @@ export default function AddStaffForm() {
             </div>
           )}
 
-          {error && (
+          {error && atPlanLimit && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-2">
+              <p className="text-sm font-semibold text-amber-900">{error}</p>
+              <a
+                href="/dashboard/billing"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600 transition-colors no-underline"
+              >
+                Ver planes →
+              </a>
+            </div>
+          )}
+
+          {error && !atPlanLimit && (
             <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
               {error}
             </div>

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { customerService } from "@/services/customer.service";
 import { businessRepository } from "@/repositories/business.repository";
-import { unitPlural } from "@/lib/loyalty-labels";
+import { unitPlural } from "@/lib/loyalty";
 import CustomersFilterBar from "@/components/filters/CustomersFilterBar";
 import Link from "next/link";
 import { Users, UserPlus } from "lucide-react";

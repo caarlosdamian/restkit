@@ -20,7 +20,7 @@ async function makeBusiness(businessId: ReturnType<typeof oid>, sub: Record<stri
     _id: businessId,
     name: 'Negocio Test',
     slug: `neg-${businessId.toString()}`,
-    settings: { requiredVisits: 10, rewardDescription: 'x' },
+    settings: { loyalty: { sellos: { required: 10, rewardDescription: 'x' } } },
     subscription: sub,
   });
 }

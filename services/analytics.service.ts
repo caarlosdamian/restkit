@@ -51,7 +51,7 @@ export const analyticsService = {
 
       Visit.countDocuments({
         businessId: bId,
-        type: 'VISIT',
+        type: 'ACCRUAL',
         createdAt: { $gte: today },
       }),
 
@@ -66,7 +66,7 @@ export const analyticsService = {
         {
           $match: {
             businessId: bId,
-            type: 'VISIT',
+            type: 'ACCRUAL',
             createdAt: { $gte: sevenDaysAgo },
           },
         },
@@ -134,6 +134,108 @@ export const analyticsService = {
    * the item level by `items.addedBy`, falling back to the order owner
    * (`staffId`) for lines created before per-item attribution existed.
    */
+  /**
+   * Does the loyalty programme pay for itself?
+   *
+   * The comparison that answers it — average ticket with a card attached vs
+   * without — only became computable once orders carried a customerId. Every
+   * figure here is an aggregation over data the POS already writes.
+   */
+  async getLoyaltyReport(businessId: string, period: ReportPeriod = 'month') {
+    await dbConnect();
+    const bId = new mongoose.Types.ObjectId(businessId);
+
+    const since = startOfToday();
+    if (period === 'week') since.setDate(since.getDate() - 6);
+    if (period === 'month') since.setDate(since.getDate() - 29);
+
+    const weekAgo = daysAgo(6);
+    const thirtyDaysAgo = daysAgo(29);
+
+    const [ticketSplit, ledger, signups, returning, totalCustomers, liability] =
+      await Promise.all([
+        // With a card vs without, over the same window.
+        Order.aggregate([
+          { $match: { businessId: bId, status: 'PAID', closedAt: { $gte: since } } },
+          {
+            $group: {
+              _id: { $cond: [{ $ifNull: ['$customerId', false] }, 'withCard', 'anonymous'] },
+              revenue: { $sum: '$total' },
+              orders: { $sum: 1 },
+            },
+          },
+        ]),
+
+        // Rewards actually handed over, and cashback in and out.
+        Visit.aggregate([
+          { $match: { businessId: bId, createdAt: { $gte: since } } },
+          { $group: { _id: { type: '$type', mechanic: '$mechanic' }, n: { $sum: 1 }, sum: { $sum: '$delta' } } },
+        ]),
+
+        Customer.countDocuments({ businessId: bId, createdAt: { $gte: weekAgo } }),
+
+        // Someone who earned on two separate days in the last 30 came back.
+        Visit.aggregate([
+          { $match: { businessId: bId, type: 'ACCRUAL', createdAt: { $gte: thirtyDaysAgo } } },
+          {
+            $group: {
+              _id: '$customerId',
+              days: { $addToSet: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } } },
+            },
+          },
+          { $project: { repeat: { $gt: [{ $size: '$days' }, 1] } } },
+          { $group: { _id: null, total: { $sum: 1 }, repeat: { $sum: { $cond: ['$repeat', 1, 0] } } } },
+        ]),
+
+        Customer.countDocuments({ businessId: bId }),
+
+        // Unredeemed balance is money the business owes. Nothing bounds it
+        // while cashback never expires, so at least make it visible.
+        Customer.aggregate([
+          { $match: { businessId: bId } },
+          { $group: { _id: null, total: { $sum: '$stats.cashbackBalance' } } },
+        ]),
+      ]);
+
+    const withCard = ticketSplit.find((r) => r._id === 'withCard');
+    const anonymous = ticketSplit.find((r) => r._id === 'anonymous');
+    const avg = (row?: { revenue: number; orders: number }) =>
+      row && row.orders > 0 ? row.revenue / row.orders : 0;
+
+    const avgWithCard = avg(withCard);
+    const avgAnonymous = avg(anonymous);
+
+    const find = (type: string, mechanic?: string) =>
+      ledger.find((r) => r._id.type === type && (!mechanic || r._id.mechanic === mechanic));
+
+    const cashbackIn = find('ACCRUAL', 'cashback');
+    const cashbackOut = find('REWARD_REDEMPTION', 'cashback');
+    const cohort = returning[0];
+
+    return {
+      period,
+      avgWithCard,
+      avgAnonymous,
+      // The headline: how much more a card-carrying customer spends.
+      uplift: avgAnonymous > 0 ? (avgWithCard - avgAnonymous) / avgAnonymous : 0,
+      ordersWithCard: withCard?.orders ?? 0,
+      ordersAnonymous: anonymous?.orders ?? 0,
+      revenueWithCard: withCard?.revenue ?? 0,
+      attachRate:
+        (withCard?.orders ?? 0) + (anonymous?.orders ?? 0) > 0
+          ? (withCard?.orders ?? 0) / ((withCard?.orders ?? 0) + (anonymous?.orders ?? 0))
+          : 0,
+      rewardsDelivered: find('REWARD_REDEMPTION', 'sellos')?.n ?? 0,
+      signupsThisWeek: signups,
+      activeCustomers: cohort?.total ?? 0,
+      returnRate: cohort?.total > 0 ? cohort.repeat / cohort.total : 0,
+      totalCustomers,
+      cashbackAccrued: cashbackIn?.sum ?? 0,
+      cashbackRedeemed: Math.abs(cashbackOut?.sum ?? 0),
+      cashbackLiability: liability[0]?.total ?? 0,
+    };
+  },
+
   async getWaiterSales(businessId: string, period: ReportPeriod) {
     await dbConnect();
     const bId = new mongoose.Types.ObjectId(businessId);

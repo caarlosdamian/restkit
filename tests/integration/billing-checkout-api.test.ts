@@ -32,7 +32,7 @@ async function makeBusiness(businessId = oid(), extra: Record<string, unknown> =
     _id: businessId,
     name: 'Negocio Test',
     slug: `neg-${businessId.toString()}`,
-    settings: { requiredVisits: 10, rewardDescription: 'x' },
+    settings: { loyalty: { sellos: { required: 10, rewardDescription: 'x' } } },
     subscription: { status: 'trialing', ...extra },
   });
 }
