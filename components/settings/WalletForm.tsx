@@ -64,6 +64,7 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
   const [previewRaw, setPreview] = useState(3);
   const [uploading, setUploading] = useState(false);
   const [localStorageWarning, setLocalWarning] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const [platform, setPlatform] = useState<Platform>("apple");
   const router = useRouter();
@@ -131,11 +132,16 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
 
   async function upload(file: File, field: "customIconUrl" | "stripImage" | "logo") {
     setUploading(true);
+    setUploadError(null);
     try {
       const form = new FormData();
       form.append("file", file);
       const res = await fetch("/api/upload", { method: "POST", body: form });
       const data = await res.json();
+      if (!res.ok) {
+        setUploadError(data.error ?? "No se pudo subir la imagen");
+        return;
+      }
       if (res.ok) {
         if (field === "logo") setBrand({ ...brand, logo: data.url });
         else setCfg({ ...cfg, card: { ...cfg.card, [field]: data.url } });
@@ -481,6 +487,12 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
               />
             </label>
           </Section>
+        )}
+
+        {uploadError && (
+          <p className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs text-rose-800">
+            {uploadError}
+          </p>
         )}
 
         {localStorageWarning && (

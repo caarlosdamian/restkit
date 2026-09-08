@@ -32,6 +32,18 @@ export function usingBlob(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
+/** Raised instead of attempting a write that cannot succeed. */
+export class StorageNotConfiguredError extends Error {
+  readonly code = 'STORAGE_NOT_CONFIGURED';
+  constructor() {
+    super(
+      'BLOB_READ_WRITE_TOKEN no está configurado. En Vercel el disco es de solo ' +
+        'lectura, así que no hay a dónde guardar la imagen.'
+    );
+    this.name = 'StorageNotConfiguredError';
+  }
+}
+
 function appUrl(): string {
   return (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 }
@@ -134,6 +146,13 @@ export async function putAsset(prefix: string, file: File): Promise<StoredAsset>
     const blob = await put(key, file, { access: 'public', addRandomSuffix: false });
     return { url: blob.url, storage: 'blob' };
   }
+
+  // The local fallback is a development convenience and is IMPOSSIBLE on
+  // Vercel: the filesystem is read-only apart from /tmp, and /tmp is
+  // per-instance and ephemeral — a file written there is gone before the
+  // customer's pass ever asks for it. Fail with something an owner can act on
+  // rather than a generic 500 from a write that was never going to land.
+  if (process.env.VERCEL) throw new StorageNotConfiguredError();
 
   const dir = path.join(localUploadDir(), prefix);
   await mkdir(dir, { recursive: true });
