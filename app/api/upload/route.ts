@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
-import { putAsset } from '@/lib/storage';
+import { putAsset, StorageNotConfiguredError } from '@/lib/storage';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
@@ -42,6 +42,12 @@ export async function POST(req: Request) {
     const asset = await putAsset(`business/${session.user.businessId}`, file);
     return NextResponse.json(asset);
   } catch (err) {
+    // A misconfigured deployment, not a failure of this request — say which,
+    // so the owner fixes the project instead of retrying the upload.
+    if (err instanceof StorageNotConfiguredError) {
+      console.error('Asset upload attempted with no blob store configured.');
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 503 });
+    }
     console.error('Asset upload failed:', err);
     return NextResponse.json({ error: 'No se pudo subir la imagen' }, { status: 500 });
   }

@@ -6,6 +6,8 @@ import { analyticsService, type ReportPeriod } from "@/services/analytics.servic
 import { businessRepository } from "@/repositories/business.repository";
 import { loyaltyConfig, formatMXN } from "@/lib/loyalty";
 import Link from "next/link";
+import { qrDataUrl } from "@/lib/qr";
+import JoinPoster from "@/components/loyalty/JoinPoster";
 import {
   Gift,
   Users,
@@ -46,9 +48,24 @@ export default async function LoyaltyPage({
     businessRepository.findById(session.user.businessId),
   ]);
 
+  if (!business) return <div className="text-sm text-gray-500">Sin negocio configurado.</div>;
+
   const loyalty = loyaltyConfig(business);
   const isCashback = loyalty.mechanic === "cashback";
+
+  // The self-enrolment poster. Rendered server-side so the QR is ready in the
+  // first paint — this is something an owner prints, not something they wait for.
+  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const joinUrl = `${appUrl}/j/${business.slug}`;
+  const joinQr = await qrDataUrl(joinUrl, 600);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
+
+  const posterHeadline = isCashback
+    ? `Te devolvemos ${loyalty.cashback.rate}% de cada compra`
+    : `Junta ${loyalty.sellos.required} ${loyalty.sellos.unitPlural} y gana`;
+  const posterSubline = isCashback
+    ? "En saldo, para usar aquí mismo"
+    : loyalty.sellos.rewardDescription;
 
   return (
     <div className="space-y-6">
@@ -88,6 +105,14 @@ export default async function LoyaltyPage({
           </Link>
         </div>
       </div>
+
+      <JoinPoster
+        url={joinUrl}
+        qrDataUrl={joinQr}
+        businessName={business.name}
+        headline={posterHeadline}
+        subline={posterSubline}
+      />
 
       {/* ── The headline: does a card make people spend more? ── */}
       <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-6">

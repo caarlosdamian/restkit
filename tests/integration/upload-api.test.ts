@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { rm, readdir } from 'fs/promises';
 import { startTestDb, stopTestDb, clearTestDb } from '../helpers/db';
 import { resetAuthState } from '../helpers/auth-state';
@@ -6,7 +6,13 @@ import { signInAs, oid } from '../helpers/fixtures';
 import { mkdtemp } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { localUploadDir, absoluteAssetUrl, assetSrc, readAsset } from '@/lib/storage';
+import {
+  localUploadDir,
+  absoluteAssetUrl,
+  assetSrc,
+  readAsset,
+  StorageNotConfiguredError,
+} from '@/lib/storage';
 
 import { POST as upload } from '@/app/api/upload/route';
 import { GET as serve } from '@/app/api/uploads/[...path]/route';
@@ -27,6 +33,7 @@ beforeEach(async () => {
   await clearTestDb();
   resetAuthState();
   delete process.env.BLOB_READ_WRITE_TOKEN;
+  delete process.env.VERCEL;
 });
 
 // A 1×1 PNG.
@@ -175,5 +182,38 @@ describe('resolving a stored asset url', () => {
     expect(await readAsset('/api/uploads/../../../etc/passwd')).toBeNull();
     expect(await readAsset('/api/uploads/business/1/missing.png')).toBeNull();
     expect(await readAsset(undefined)).toBeNull();
+  });
+});
+
+describe('a deployment with no blob store', () => {
+  afterEach(() => {
+    delete process.env.VERCEL;
+  });
+
+  it('refuses instead of writing to a disk that cannot hold it', async () => {
+    // On Vercel the filesystem is read-only apart from /tmp, and /tmp is
+    // per-instance and ephemeral — a file written there is gone before the
+    // customer's pass ever asks for it. The local fallback is a development
+    // convenience, not a production one.
+    process.env.VERCEL = '1';
+    signInAs(oid(), 'OWNER');
+
+    const res = await upload(uploadRequest(png()));
+    const data = await res.json();
+
+    // 503, not 500: the deployment is misconfigured, this request is fine.
+    expect(res.status).toBe(503);
+    expect(data.code).toBe('STORAGE_NOT_CONFIGURED');
+    expect(data.error).toContain('BLOB_READ_WRITE_TOKEN');
+  });
+
+  it('still writes to disk when NOT on Vercel', async () => {
+    // Local dev must keep working with no Vercel account at all.
+    signInAs(oid(), 'OWNER');
+    expect((await upload(uploadRequest(png()))).status).toBe(200);
+  });
+
+  it('carries a code the UI can branch on', () => {
+    expect(new StorageNotConfiguredError().code).toBe('STORAGE_NOT_CONFIGURED');
   });
 });
