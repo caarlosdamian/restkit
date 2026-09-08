@@ -335,6 +335,17 @@ All routes require authentication via `better-auth`.
 
 ---
 
+## Marketing / SEO pages
+
+`/lealtad` (hub) and `/lealtad/[vertical]` — one landing page per trade (restaurantes, cafeterías, barberías, spas, gimnasios…), the content in `lib/verticals.ts`.
+
+- ⚠️ **The failure mode of programmatic SEO is twelve pages whose only difference is the noun** — Google calls that thin content and it earns nothing. So `Vertical` has **no "insert trade here" slots**: the argument (`problem`), the reward ideas, the FAQ, the accent, and even **which mechanic the page leads with** are written per vertical (a gym is not a taquería). `tests/unit/verticals.test.ts` asserts that copy is not shared between entries; **a new vertical that reads like a copy of another one is not worth adding.**
+- **Statically generated** (`generateStaticParams` + `dynamicParams = false`). They render the nav signed-out on purpose: reading the session opts the whole page into per-request rendering, and these exist to be crawled and served from the edge.
+- The hero shows the **real `LoyaltyCard`** with that trade's settings, not a stock photo — a rendering of the actual product, and free.
+- Each page sets its own `canonical` (twelve pages about one product is exactly the shape a crawler mistakes for duplicates) and emits `FAQPage` JSON-LD built from the same array the page renders, so the two cannot disagree.
+- `components/landing/SiteNav.tsx` / `SiteFooter.tsx` are shared with the home page. The footer carries `VerticalLinks`, which is what links these pages to each other — a crawler finds all of them from anywhere on the site, not only from the sitemap.
+- `app/sitemap.ts` lists only these; `app/robots.ts` disallows `/c/`, `/j/`, `/scan`, `/dashboard`, `/pos`, `/api/`. Those are public so a QR works, **not so they get indexed.**
+
 ## Dashboard Pages
 
 All pages are protected by `auth()` and redirect to `/login` if unauthenticated.
