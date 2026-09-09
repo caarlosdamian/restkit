@@ -12,6 +12,7 @@ import {
   stampPalette,
   saturation,
   stripSvg,
+  renderStrip,
   readableInk,
   contrastRatio,
   groundFor,
@@ -639,5 +640,24 @@ describe('where the photo goes', () => {
     expect(plain).toContain('x="187.5"');
     const side = svgFor('side', { required: 10 }, 135);
     expect(side).toContain('x="255"'); // 135 + (375-135)/2
+  });
+});
+
+describe('the renderer itself', () => {
+  // Nothing else in the suite actually invokes sharp: every strip test reads
+  // the SVG string, so a sharp that cannot load — or whose API moved — passed
+  // all 405 of them and failed only in production. This is the one test that
+  // proves the native binding works before a deploy does.
+  it('produces a PNG', async () => {
+    const png = await renderStrip({
+      currentVisits: 3,
+      cashbackBalance: 0,
+      config: sellos({ required: 10 }),
+      brandColor: '#b7348d',
+      scale: 2,
+    });
+    // PNG magic number, and a strip with ten stamps drawn on it is not tiny.
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(png.byteLength).toBeGreaterThan(1000);
   });
 });

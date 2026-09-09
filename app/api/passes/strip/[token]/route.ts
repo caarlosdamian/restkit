@@ -1,7 +1,7 @@
 import Customer from '@/models/Customer';
 import { businessRepository } from '@/repositories/business.repository';
 import { loyaltyConfig } from '@/lib/loyalty';
-import { renderStrip } from '@/lib/strip-render';
+import { renderStrip, ImageRenderUnavailableError } from '@/lib/strip-render';
 import dbConnect from '@/lib/db';
 
 /**
@@ -28,17 +28,32 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
   const config = loyaltyConfig(business);
 
-  const png = await renderStrip({
-    currentVisits: customer.stats.currentVisits,
-    cashbackBalance: customer.stats.cashbackBalance ?? 0,
-    config,
-    brandColor: business.branding?.primaryColor || '#4f46e5',
-    backgroundUrl: config.card.stripImage,
-    customIconUrl: config.card.customIconUrl,
-    // Google's hero slot is 1032×336; the strip's box is the same 3:1, so @3x
-    // lands almost exactly on it without a second layout.
-    scale: 3,
-  });
+  let png: Buffer;
+  try {
+    png = await renderStrip({
+      currentVisits: customer.stats.currentVisits,
+      cashbackBalance: customer.stats.cashbackBalance ?? 0,
+      config,
+      brandColor: business.branding?.primaryColor || '#4f46e5',
+      backgroundUrl: config.card.stripImage,
+      customIconUrl: config.card.customIconUrl,
+      // Google's hero slot is 1032×336; the strip's box is the same 3:1, so @3x
+      // lands almost exactly on it without a second layout.
+      scale: 3,
+    });
+  } catch (err) {
+    // Never cached: Google keeps whatever it fetches, and an error frozen
+    // against this URL would outlive the deployment that caused it.
+    const unavailable = err instanceof ImageRenderUnavailableError;
+    console.error('Strip render failed:', err);
+    return new Response(null, {
+      status: unavailable ? 503 : 500,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-Render-Error': unavailable ? err.code : 'RENDER_FAILED',
+      },
+    });
+  }
 
   return new Response(png as unknown as BodyInit, {
     headers: {

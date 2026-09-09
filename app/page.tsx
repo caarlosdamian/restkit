@@ -2,11 +2,13 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import PricingSection from "@/components/landing/PricingSection";
+import SiteNav from "@/components/landing/SiteNav";
+import SiteFooter from "@/components/landing/SiteFooter";
 import {
-  CreditCard, Smartphone, BarChart3, QrCode, Bell, ArrowRight,
+  BarChart3, QrCode, Bell, ArrowRight,
   ChevronRight, ShoppingCart, Monitor, Package, FileText,
   Truck, Gift, Check, Zap, Shield, Globe, Users,
-  TrendingUp, Clock, Star, CheckCircle2, Layers, Heart,
+  TrendingUp, Clock, Star, CheckCircle2, Layers,
 } from "lucide-react";
 
 export default async function LandingPage() {
@@ -17,7 +19,7 @@ export default async function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 antialiased">
-      <Nav isAuthenticated={!!session} panelHref={panelHref} />
+      <SiteNav isAuthenticated={!!session} panelHref={panelHref} />
       <Hero />
       <SocialProof />
       <Modules />
@@ -27,50 +29,8 @@ export default async function LandingPage() {
       <PricingSection />
       <Testimonials />
       <CtaBanner />
-      <Footer />
+      <SiteFooter />
     </div>
-  );
-}
-
-/* ─── NAV ─── */
-function Nav({ isAuthenticated, panelHref }: { isAuthenticated: boolean; panelHref: string }) {
-  return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-gray-100">
-      <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center gap-8">
-        <Link href="/" className="flex items-center gap-2 text-gray-900 font-bold text-lg tracking-tight no-underline whitespace-nowrap shrink-0">
-          <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-            <rect width="32" height="32" rx="8" fill="#10b981" />
-            <path d="M10 16L16 10L22 16L16 22Z" fill="white" />
-          </svg>
-          RestKit
-        </Link>
-        <nav className="hidden md:flex gap-7 flex-1">
-          <a href="#modulos" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors no-underline">Módulos</a>
-          <a href="#analytics" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors no-underline">Analíticas</a>
-          <a href="#fidelizacion" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors no-underline">Fidelización</a>
-          <a href="#precios" className="text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors no-underline">Precios</a>
-        </nav>
-        <div className="flex gap-3 items-center shrink-0">
-          {isAuthenticated ? (
-            <Link
-              href={panelHref}
-              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm no-underline"
-            >
-              Ir al panel <ArrowRight size={14} />
-            </Link>
-          ) : (
-            <>
-              <Link href="/login" className="hidden sm:inline-flex text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2 rounded-xl hover:bg-gray-50 transition-all no-underline">
-                Iniciar sesión
-              </Link>
-              <Link href="/registro" className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all shadow-sm no-underline">
-                Prueba gratis
-              </Link>
-            </>
-          )}
-        </div>
-      </div>
-    </header>
   );
 }
 
@@ -567,47 +527,3 @@ function CtaBanner() {
 }
 
 /* ─── FOOTER ─── */
-function Footer() {
-  return (
-    <footer className="border-t border-gray-100 pt-14 bg-gray-50">
-      <div className="max-w-[1200px] mx-auto px-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] gap-8 pb-12">
-        <div>
-          <Link href="/" className="flex items-center gap-2 text-gray-900 font-bold text-lg tracking-tight no-underline mb-3">
-            <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-              <rect width="32" height="32" rx="8" fill="#10b981" />
-              <path d="M10 16L16 10L22 16L16 22Z" fill="white" />
-            </svg>
-            RestKit
-          </Link>
-          <p className="text-sm text-gray-400 leading-relaxed max-w-[240px]">
-            El sistema operativo para restaurantes mexicanos modernos.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1">Plataforma</h4>
-          {["POS & Pagos", "KDS Cocina", "Inventario", "Analíticas", "Facturación CFDI", "Fidelización"].map((l) => (
-            <a key={l} href="#modulos" className="text-sm text-gray-500 hover:text-emerald-500 transition-colors no-underline">{l}</a>
-          ))}
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1">Empresa</h4>
-          {["Nosotros", "Blog", "Soporte", "API Docs", "Contacto"].map((l) => (
-            <a key={l} href="#" className="text-sm text-gray-500 hover:text-emerald-500 transition-colors no-underline">{l}</a>
-          ))}
-        </div>
-        <div className="flex flex-col gap-2.5">
-          <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1">Legal</h4>
-          {["Privacidad", "Términos de uso", "Cookies", "CFDI & SAT"].map((l) => (
-            <a key={l} href="#" className="text-sm text-gray-500 hover:text-emerald-500 transition-colors no-underline">{l}</a>
-          ))}
-        </div>
-      </div>
-      <div className="max-w-[1200px] mx-auto px-6 border-t border-gray-200 py-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-gray-400">© 2026 RestKit. Todos los derechos reservados.</p>
-        <p className="inline-flex items-center gap-1 text-xs text-gray-400">
-          Hecho con <Heart size={11} className="text-rose-400 fill-rose-400" /> en México
-        </p>
-      </div>
-    </footer>
-  );
-}

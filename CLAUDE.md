@@ -87,6 +87,10 @@ The differentiator: **the stamp happens at cobro** — no scanner, no extra step
 ### The card image
 Apple has no stamps widget — a `storeCard` gets icon, logo and strip. `lib/strip-render.ts` renders `strip.png` per customer with sharp and re-issues on every update, which is what makes the card visibly fill up. Same renderer backs `GET /api/passes/preview`, so the dashboard preview is byte-identical to what ships. Icons come from `lib/stamp-icons.ts` (lucide paths, thickened for stamp size).
 
+⚠️ **`sharp` is pinned to `0.34.4` — exact, not a caret range.** 0.35.x cannot resolve its `libvips` binary inside a Turbopack build on Vercel (`ERR_DLOPEN_FAILED: libvips-cpp.so`), and the failure is at **module load**, so it took down every route that imported the renderer before a line of their own ran: `/api/passes/preview` and `/api/passes/strip/[token]` answered 500, `/api/passes/apple/[customerId]` could not issue a pass, and `/api/passes/strip/<garbage>` returned 500 instead of 404 — which is how you tell this apart from a bad request. Locally everything worked, because the darwin binary loads fine. Do not float the range back up without deploying and re-checking those routes.
+
+Two things make that class of failure legible next time. `renderStrip` **loads sharp on demand, never at module scope** (`loadSharp()`, throwing `ImageRenderUnavailableError`), so a broken binding can no longer take a route's auth and 404 handling with it. And both image routes catch it: they return **503 with an `X-Render-Error` header** instead of Next's HTML error page, which — served into an `<img>` — showed the owner a broken-image icon and nothing else. `tests/unit/loyalty.test.ts` now has one test that actually calls `renderStrip` and asserts PNG bytes; every other strip test reads the SVG string, so all 405 of them passed against a sharp that could not load.
+
 **Three orthogonal design axes**, all on `settings.loyalty.card`:
 - `ground`: `light` (white card) | `brand` (painted in the business colour) | `dark` (a deep version of that hue, never generic black). A `stripImage` photo overrides all three.
 - `stampStyle`: `filled` (default — a solid badge with the icon **knocked out in the ground colour**; this is what reads across a counter) | `outline` (ring around the glyph) | `plain` (bare glyph, the original).
@@ -334,6 +338,17 @@ All routes require authentication via `better-auth`.
 - `GET /api/passes/google/[customerId]` — Generate JWT → redirect to Google Wallet save URL
 
 ---
+
+## Marketing / SEO pages
+
+`/lealtad` (hub) and `/lealtad/[vertical]` — one landing page per trade (restaurantes, cafeterías, barberías, spas, gimnasios…), the content in `lib/verticals.ts`.
+
+- ⚠️ **The failure mode of programmatic SEO is twelve pages whose only difference is the noun** — Google calls that thin content and it earns nothing. So `Vertical` has **no "insert trade here" slots**: the argument (`problem`), the reward ideas, the FAQ, the accent, and even **which mechanic the page leads with** are written per vertical (a gym is not a taquería). `tests/unit/verticals.test.ts` asserts that copy is not shared between entries; **a new vertical that reads like a copy of another one is not worth adding.**
+- **Statically generated** (`generateStaticParams` + `dynamicParams = false`). They render the nav signed-out on purpose: reading the session opts the whole page into per-request rendering, and these exist to be crawled and served from the edge.
+- The hero shows the **real `LoyaltyCard`** with that trade's settings, not a stock photo — a rendering of the actual product, and free.
+- Each page sets its own `canonical` (twelve pages about one product is exactly the shape a crawler mistakes for duplicates) and emits `FAQPage` JSON-LD built from the same array the page renders, so the two cannot disagree.
+- `components/landing/SiteNav.tsx` / `SiteFooter.tsx` are shared with the home page. The footer carries `VerticalLinks`, which is what links these pages to each other — a crawler finds all of them from anywhere on the site, not only from the sitemap.
+- `app/sitemap.ts` lists only these; `app/robots.ts` disallows `/c/`, `/j/`, `/scan`, `/dashboard`, `/pos`, `/api/`. Those are public so a QR works, **not so they get indexed.**
 
 ## Dashboard Pages
 
