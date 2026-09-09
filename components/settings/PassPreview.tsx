@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { groundFor, readableInk, relLuminance } from "@/lib/card-colors";
 import { buildCardLayout, type CardField } from "@/lib/card-layout";
 import type { ILoyaltyConfig } from "@/models/Business";
@@ -106,8 +107,7 @@ function ApplePass({
           {layout.header[0] && <FieldCell field={layout.header[0]} label={label} align="right" />}
         </div>
 
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={stripSrc} alt="Vista previa de la tarjeta" className="block w-full" />
+        <StripImage src={stripSrc} alt="Vista previa de la tarjeta" />
 
         {layout.secondary.length > 0 && (
           <Row fields={layout.secondary} label={label} />
@@ -176,8 +176,7 @@ function GooglePass({
 
         {/* The hero is the same strip the iPhone gets — Google has no stamps
             widget either, and text alone was the whole Android experience. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={stripSrc} alt="" className="block w-full" />
+        <StripImage src={stripSrc} alt="" />
 
         <div className="flex justify-center px-3.5 py-3.5">
           <QrPlate />
@@ -211,6 +210,64 @@ function GooglePass({
 }
 
 /* ---------------------------------------------------------------- parts */
+
+/**
+ * The strip, with the fact that it is being re-rendered on the screen.
+ *
+ * ⚠️ **This image is generated per change, not fetched from a cache.** Every
+ * edit — a placement chip, a colour, a drag of the stamp slider — is a fresh
+ * sharp render on the server, and a card carrying a photo takes far longer
+ * than one without. A plain `<img>` keeps painting the PREVIOUS strip for that
+ * whole time, so switching from a placement Apple cannot show back to one it
+ * can looks like the photo simply never came back. Dim it and say it is
+ * working: the owner is judging a design, and a stale frame is a wrong answer
+ * shown confidently.
+ *
+ * A failure gets words for the same reason. The routes answer 503/500 with no
+ * body precisely so this does not become an HTML error page inside an <img>,
+ * which renders as a broken-image icon and tells the owner nothing.
+ */
+function StripImage({ src, alt }: { src: string; alt: string }) {
+  const ref = useRef<HTMLImageElement>(null);
+  const [settled, setSettled] = useState<{ src: string; ok: boolean } | null>(null);
+
+  // A cached image can already be complete before React attaches its handlers,
+  // in which case `load` never fires and the spinner would never clear.
+  useEffect(() => {
+    const el = ref.current;
+    if (el?.complete && el.naturalWidth > 0) setSettled({ src, ok: true });
+  }, [src]);
+
+  const done = settled?.src === src;
+  const failed = done && !settled.ok;
+
+  return (
+    <div className="relative">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={ref}
+        src={src}
+        alt={alt}
+        onLoad={() => setSettled({ src, ok: true })}
+        onError={() => setSettled({ src, ok: false })}
+        className={`block w-full transition-opacity duration-200 ${
+          done && !failed ? "opacity-100" : "opacity-40"
+        }`}
+      />
+      {!done && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Loader2 size={18} className="animate-spin text-gray-500/80" />
+        </span>
+      )}
+      {failed && (
+        <span className="absolute inset-0 flex items-center justify-center bg-white/85 px-3 text-center text-[0.65rem] font-semibold leading-tight text-gray-600">
+          No se pudo generar la vista previa. Vuelve a intentarlo.
+        </span>
+      )}
+    </div>
+  );
+}
+
 
 interface Chrome {
   ground: string;
