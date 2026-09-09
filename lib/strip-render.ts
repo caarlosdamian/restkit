@@ -369,8 +369,70 @@ export function stripSvg(
 // the upload path loads sharp too.
 export { ImageRenderUnavailableError };
 
-/** Local assets come off disk, remote ones over the wire — see readAsset. */
-const fetchImage = readAsset;
+/**
+ * Asset bytes for the renderer, fetched once per process.
+ *
+ * ⚠️ **Without this, the photo silently vanishes.** In production an uploaded
+ * photo is a blob URL, so `readAsset` refetches the whole file over the network
+ * on EVERY render — every keystroke in the wallet form, and three times over
+ * for the @1x/@2x/@3x variants in a single pass. When one of those fetches
+ * fails or times out it returns null, and the strip renders **without the
+ * photo at HTTP 200**: no error, no broken image, the owner just watches their
+ * picture disappear while editing an unrelated field.
+ *
+ * Caching is safe because an asset URL is immutable — `putAsset` names every
+ * file `<timestamp>-<random>.<ext>` and never rewrites one, so replacing a
+ * photo produces a NEW url. A stale entry is unreachable, never wrong.
+ */
+const MAX_CACHED_BYTES = 24 * 1024 * 1024;
+const assetCache = new Map<string, Buffer>();
+const inFlight = new Map<string, Promise<Buffer | null>>();
+let cachedBytes = 0;
+
+async function fetchImage(url?: string | null): Promise<Buffer | null> {
+  if (!url) return null;
+
+  const cached = assetCache.get(url);
+  if (cached) {
+    // Re-insert so the map's insertion order stays least-recently-used first.
+    assetCache.delete(url);
+    assetCache.set(url, cached);
+    return cached;
+  }
+
+  // Collapse concurrent callers onto one fetch: renderStripVariants asks for
+  // the same photo three times at once, for three scales of the same pass.
+  const running = inFlight.get(url);
+  if (running) return running;
+
+  const job = load(url).finally(() => inFlight.delete(url));
+  inFlight.set(url, job);
+  return job;
+}
+
+async function load(url: string): Promise<Buffer | null> {
+  // One retry. A blob fetch that blips would otherwise cost the customer their
+  // photo on a card that gets re-issued and cached for days.
+  const bytes = (await readAsset(url)) ?? (await readAsset(url));
+  if (!bytes) return null;
+
+  cachedBytes += bytes.byteLength;
+  assetCache.set(url, bytes);
+  for (const [key, value] of assetCache) {
+    if (cachedBytes <= MAX_CACHED_BYTES) break;
+    if (key === url) continue; // never evict what we just fetched
+    assetCache.delete(key);
+    cachedBytes -= value.byteLength;
+  }
+  return bytes;
+}
+
+/** Test seam: the cache is process-wide and would otherwise leak between specs. */
+export function __clearAssetCache(): void {
+  assetCache.clear();
+  inFlight.clear();
+  cachedBytes = 0;
+}
 
 /** How much of the strip a side-by-side photo takes. Enough to read as a
  *  picture of the place, not so much that a 10-stamp grid stops fitting. */
