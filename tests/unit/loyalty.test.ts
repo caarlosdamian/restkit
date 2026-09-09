@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'path';
-import { existsSync, readFileSync } from 'fs';
+import os from 'os';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { normalizeUpload, MAX_ASSET_EDGE } from '@/lib/image-normalize';
 import {
   stampState,
   accrualFor,
@@ -714,5 +716,102 @@ describe('the renderer itself', () => {
     // PNG magic number, and a strip with ten stamps drawn on it is not tiny.
     expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
     expect(png.byteLength).toBeGreaterThan(1000);
+  });
+});
+
+describe('the photo an owner actually uploads', () => {
+  // Straight off a phone: the ones in this project's own dev store are
+  // 3814x4767 / 2.5 MB, for a strip that is 1125x369 at its very largest.
+  async function photo(width: number, height: number, format: 'jpeg' | 'png' = 'jpeg') {
+    const sharp = (await import('sharp')).default;
+    // Noise, so the encoder cannot collapse it into a few bytes and hide the
+    // size difference this test is about.
+    const px = Buffer.alloc(width * height * 3);
+    for (let i = 0; i < px.length; i++) px[i] = (i * 37) % 251;
+    const img = sharp(px, { raw: { width, height, channels: 3 } });
+    return format === 'png' ? img.png().toBuffer() : img.jpeg({ quality: 90 }).toBuffer();
+  }
+
+  const asFile = (bytes: Buffer, type: string, name = 'foto') =>
+    new File([new Uint8Array(bytes)], name, { type });
+
+  it('never stores more pixels than a card can show', async () => {
+    const big = await photo(3000, 2000);
+    const out = await normalizeUpload(asFile(big, 'image/jpeg'));
+
+    const sharp = (await import('sharp')).default;
+    const meta = await sharp(Buffer.from(await out.arrayBuffer())).metadata();
+    expect(Math.max(meta.width!, meta.height!)).toBeLessThanOrEqual(MAX_ASSET_EDGE);
+    // The point of the exercise: the render no longer decodes the original.
+    expect(out.size).toBeLessThan(big.byteLength);
+  });
+
+  it('keeps the format, so a PNG logo keeps its transparency', async () => {
+    const big = await photo(2400, 2400, 'png');
+    const out = await normalizeUpload(asFile(big, 'image/png', 'logo.png'));
+    expect(out.type).toBe('image/png');
+    const sharp = (await import('sharp')).default;
+    expect((await sharp(Buffer.from(await out.arrayBuffer())).metadata()).format).toBe('png');
+  });
+
+  it('leaves alone what it cannot improve', async () => {
+    // An SVG has no pixels to drop, and re-encoding it would rasterise a logo.
+    const svg = asFile(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), 'image/svg+xml');
+    expect(await normalizeUpload(svg)).toBe(svg);
+
+    // Already card-sized: resizing would cost a decode and save nothing.
+    const small = asFile(await photo(900, 300), 'image/jpeg');
+    expect(await normalizeUpload(small)).toBe(small);
+  });
+});
+
+describe('moving the photo around', () => {
+  // The reported symptom: pick the placement Apple cannot show, go back to one
+  // it can, and the photo is gone. The renderer must be a pure function of the
+  // placement — the same choice has to draw the same card every time it is
+  // picked, whatever was picked in between.
+  const dir = path.join(os.tmpdir(), 'restkit-strip-photo');
+  const PHOTO = '/api/uploads/foto.jpg';
+
+  beforeAll(async () => {
+    const sharp = (await import('sharp')).default;
+    const px = Buffer.alloc(1200 * 800 * 3);
+    for (let i = 0; i < px.length; i++) px[i] = (i * 37) % 251;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, 'foto.jpg'),
+      await sharp(px, { raw: { width: 1200, height: 800, channels: 3 } }).jpeg().toBuffer()
+    );
+    process.env.UPLOAD_DIR = dir;
+  });
+
+  afterAll(() => {
+    delete process.env.UPLOAD_DIR;
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  const render = (photoPlacement: 'background' | 'side' | 'footer') =>
+    renderStrip({
+      currentVisits: 3,
+      cashbackBalance: 0,
+      config: sellos({}, { photoPlacement, stripImage: PHOTO }),
+      brandColor: '#b76910',
+      backgroundUrl: PHOTO,
+      scale: 1,
+    });
+
+  it('draws the same card the second time a placement is chosen', async () => {
+    const background = await render('background');
+    const side = await render('side');
+    const footer = await render('footer');
+
+    // Round trip through the placement Apple has no slot for.
+    expect((await render('background')).equals(background)).toBe(true);
+    expect((await render('side')).equals(side)).toBe(true);
+
+    // And the three really are different cards, so the check above is not
+    // passing on three copies of a photo-less strip.
+    expect(background.equals(side)).toBe(false);
+    expect(side.equals(footer)).toBe(false);
   });
 });

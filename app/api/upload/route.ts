@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { putAsset, StorageNotConfiguredError } from '@/lib/storage';
+import { normalizeUpload } from '@/lib/image-normalize';
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
@@ -39,7 +40,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const asset = await putAsset(`business/${session.user.businessId}`, file);
+    // Downscaled before it is stored, never after: the original would
+    // otherwise be re-fetched and re-decoded on every card render.
+    const asset = await putAsset(`business/${session.user.businessId}`, await normalizeUpload(file));
     return NextResponse.json(asset);
   } catch (err) {
     // A misconfigured deployment, not a failure of this request — say which,

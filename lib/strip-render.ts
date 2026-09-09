@@ -1,7 +1,5 @@
-import type Sharp from 'sharp';
-import path from 'path';
-import { existsSync } from 'fs';
 import { readAsset } from './storage';
+import { loadSharp, ImageRenderUnavailableError } from './sharp-runtime';
 import { findStampIcon, STAMP_STROKE } from './stamp-icons';
 import { stampState, formatMXN } from './loyalty';
 import type { ILoyaltyConfig, StampStyle } from '@/models/Business';
@@ -343,74 +341,17 @@ export function stripSvg(
 
 /* ------------------------------------------------------------------ png */
 
+// Re-exported so the routes that render a card keep importing the renderer's
+// own failure type from the renderer. It lives in lib/sharp-runtime.ts because
+// the upload path loads sharp too.
+export { ImageRenderUnavailableError };
+
 /** Local assets come off disk, remote ones over the wire — see readAsset. */
 const fetchImage = readAsset;
 
 /** How much of the strip a side-by-side photo takes. Enough to read as a
  *  picture of the place, not so much that a 10-stamp grid stops fitting. */
 export const SIDE_PHOTO_FRACTION = 0.36;
-
-/** The image renderer could not be loaded at all — a broken deployment, not a
- *  bad request. Separated from a render failure so a route can say which. */
-export class ImageRenderUnavailableError extends Error {
-  readonly code = 'IMAGE_RENDER_UNAVAILABLE';
-  constructor(cause: unknown) {
-    super(`No se pudo cargar el renderizador de imágenes: ${(cause as Error)?.message ?? cause}`);
-  }
-}
-
-/**
- * sharp is loaded on demand, never at module scope.
- *
- * It is a native binding, and the one thing it does on a bad deployment is
- * fail to load — which, as a top-level import, took the whole route module
- * down with it. Every handler in the file then answered 500 before running a
- * line of its own: `/api/passes/strip/<garbage>` returned 500 instead of 404,
- * and the dashboard preview got an HTML error page inside an <img>, so the
- * owner saw a broken-image icon and nothing else. Loading it here keeps the
- * failure inside the one call that needs it.
- *
- * (What broke: sharp 0.35.x cannot resolve its libvips binary in a Turbopack
- * build on Vercel — see the pin in package.json.)
- */
-let sharpModule: typeof Sharp | null = null;
-async function loadSharp(): Promise<typeof Sharp> {
-  if (sharpModule) return sharpModule;
-  configureCardFonts();
-  try {
-    sharpModule = (await import('sharp')).default;
-    return sharpModule;
-  } catch (err) {
-    throw new ImageRenderUnavailableError(err);
-  }
-}
-
-/**
- * Point fontconfig at the fonts we ship.
- *
- * ⚠️ **Vercel's runtime has no fonts installed — not even a generic
- * `sans-serif`.** librsvg drew every character of the strip as a .notdef box:
- * the stamps were perfect (they're paths) and every word on the card was tofu.
- * A developer machine hides this completely, because macOS has Helvetica.
- *
- * Must run BEFORE sharp is imported: libvips initialises fontconfig when it
- * loads, and the environment is read once. That ordering is the only reason
- * this lives next to `loadSharp` instead of in the routes.
- */
-function configureCardFonts(): void {
-  // An explicitly configured environment wins — a container that mounted its
-  // own font set should not be overridden by ours.
-  if (process.env.FONTCONFIG_PATH) return;
-  const dir = path.join(process.cwd(), 'assets', 'fonts');
-  if (!existsSync(path.join(dir, 'fonts.conf'))) {
-    // Not fatal: the card still renders, it just renders in whatever the host
-    // happens to have. Worth a line in the log, because on a host with nothing
-    // this is the difference between text and boxes.
-    console.warn(`Card fonts not found at ${dir} — text will use host fonts.`);
-    return;
-  }
-  process.env.FONTCONFIG_PATH = dir;
-}
 
 /** Renders the strip to a PNG at the requested scale. */
 export async function renderStrip(input: StripInput): Promise<Buffer> {
@@ -438,6 +379,13 @@ export async function renderStrip(input: StripInput): Promise<Buffer> {
   const placement = input.config.card?.photoPlacement ?? 'background';
   const wantsPhoto = Boolean(input.backgroundUrl) && placement !== 'footer';
   const bg = wantsPhoto ? await fetchImage(input.backgroundUrl as string) : null;
+  if (wantsPhoto && !bg) {
+    // The card still renders — without the photo, and with nothing on screen
+    // to say why. An owner reads that as "my photo disappeared". The usual
+    // cause is a blob URL we could not fetch in time, which is exactly what a
+    // full-resolution phone photo makes likely (see lib/image-normalize.ts).
+    console.warn('Strip photo could not be loaded, rendering without it:', input.backgroundUrl);
+  }
 
   let base: Buffer | null = null;
   let groundHex: string | undefined;

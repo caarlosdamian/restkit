@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   // The card fonts. Nothing imports these files, so the build would not trace
   // them into the function — and a serverless runtime has no fonts of its own,
   // which is how every word on the wallet card came out as a .notdef box.
-  // See `configureCardFonts` in lib/strip-render.ts.
+  // See `configureCardFonts` in lib/sharp-runtime.ts.
   outputFileTracingIncludes: {
     "/api/passes/**": ["./assets/fonts/**"],
   },

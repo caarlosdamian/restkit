@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Check, Search, Upload, MapPin, Loader2, Stamp, Wallet } from "lucide-react";
 import {
@@ -87,7 +87,7 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
     [cfg]
   );
 
-  const previewSrc = useMemo(() => {
+  const previewUrl = useMemo(() => {
     const p = new URLSearchParams({
       mechanic: cfg.mechanic,
       required: String(cfg.sellos.required),
@@ -107,6 +107,11 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
     if (cfg.card.customIconUrl) p.set("customIcon", cfg.card.customIconUrl);
     return `/api/passes/preview?${p.toString()}`;
   }, [cfg, brand.primaryColor, preview]);
+
+  // Each URL is a fresh server-side render, so dragging the stamp slider used
+  // to queue one per step and land the last of them seconds later. Settle
+  // first, then render once.
+  const previewSrc = useDebounced(previewUrl, 250);
 
   async function save() {
     setSaving(true);
@@ -746,6 +751,16 @@ const PLACEMENTS: { id: PhotoPlacement; label: string; hint: string }[] = [
 ];
 
 /** A miniature of where the photo lands, drawn with the owner's own photo. */
+/** Value that only changes once the input has been still for `ms`. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return settled;
+}
+
 function PlacementSketch({ placement, photo }: { placement: PhotoPlacement; photo: string }) {
   const img = "absolute object-cover";
   return (
