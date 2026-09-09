@@ -12,6 +12,7 @@ import Customer from '@/models/Customer';
 import Business from '@/models/Business';
 import { loyaltyConfig, stampState } from '@/lib/loyalty';
 import { qrDataUrl } from '@/lib/qr';
+import { appUrl } from '@/lib/app-url';
 
 type Params = Promise<{ orderId: string }>;
 
@@ -188,8 +189,8 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
         const customer = await Customer.findById(order.customerId).select('publicToken');
         const business = await Business.findById(ctx.businessId).select('settings');
         const config = loyaltyConfig(business);
-        const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-        const cardUrl = customer ? `${appUrl}/c/${customer.publicToken}` : undefined;
+        const base = appUrl();
+        const cardUrl = customer ? `${base}/c/${customer.publicToken}` : undefined;
 
         loyalty = {
           ...result,

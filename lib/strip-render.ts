@@ -16,9 +16,30 @@ import type { ILoyaltyConfig, StampStyle } from '@/models/Business';
  * designs is byte-identical to what ships.
  */
 
-/** Apple's storeCard strip box at 1x. @2x and @3x are the same box scaled. */
+/**
+ * The strip canvas at 1x. @2x and @3x are the same box scaled.
+ *
+ * ⚠️ **123 was wrong on a real iPhone.** Apple's own table gives a storeCard
+ * 375×123pt, but that figure is for a strip with primaryFields drawn on top of
+ * it — and this pass deliberately ships none (see lib/card-fields.ts). Measured
+ * off an actual pass on a 1242×2688 device, the box Wallet allotted was
+ * **375×145pt**. Wallet scales a strip to FILL that box, so a 3.05:1 image in a
+ * 2.60:1 hole was blown up 17% and had 29pt sliced off each edge: the fifth
+ * column of stamps and the last word of the caption were simply gone.
+ *
+ * So the canvas is 144 and every element is laid out inside a centred
+ * `STRIP_CONTENT_H` band, with only ground or photo in the margins. Whatever
+ * box a client picks between the two, the crop lands on bleed:
+ *  - Wallet's 375×144  → the whole canvas, nothing lost.
+ *  - Apple's documented 375×123 → crops back to exactly the content band.
+ *  - Google's 1032×336 hero (3.07:1) → crops to 122pt, the content band again.
+ */
 export const STRIP_W = 375;
-export const STRIP_H = 123;
+export const STRIP_H = 144;
+
+/** The band every element is drawn in, centred in `STRIP_H`. Never lay out
+ *  against STRIP_H — the difference is bleed that a client is free to crop. */
+export const STRIP_CONTENT_H = 123;
 
 export interface StripInput {
   currentVisits: number;
@@ -185,7 +206,9 @@ export function stripSvg(
 ): string {
   const { config, brandColor } = input;
   const w = STRIP_W;
-  const h = STRIP_H;
+  // The SVG is the content band only. renderStrip centres it on the taller
+  // canvas and fills the bleed, so nothing here has to know about the margin.
+  const h = STRIP_CONTENT_H;
 
   // With the photo BESIDE the stamps, the stamps sit on the card ground, not
   // on the picture — so the photo's average must not drive the ink.
@@ -446,12 +469,31 @@ export async function renderStrip(input: StripInput): Promise<Buffer> {
       backgroundUrl: base ? input.backgroundUrl : undefined,
     })
   );
-  const overlay = await sharp(svg).resize(w, h).png().toBuffer();
+  const contentH = STRIP_CONTENT_H * scale;
+  const overlay = await sharp(svg).resize(w, contentH).png().toBuffer();
 
-  if (!base) return overlay;
+  // The canvas is taller than the band the content is drawn in; the difference
+  // is bleed, and it has to be filled or a client's crop shows through it. With
+  // a photo the composited base already covers it — without one it is the flat
+  // card ground, the same colour the SVG paints behind the content.
+  const canvas =
+    base ??
+    (await sharp({
+      create: {
+        width: w,
+        height: h,
+        channels: 4,
+        background: groundFor(input.config.card?.ground, input.brandColor),
+      },
+    })
+      .png()
+      .toBuffer());
 
   try {
-    return await sharp(base).composite([{ input: overlay, blend: 'over' }]).png().toBuffer();
+    return await sharp(canvas)
+      .composite([{ input: overlay, blend: 'over', left: 0, top: Math.round((h - contentH) / 2) }])
+      .png()
+      .toBuffer();
   } catch (err) {
     console.error('Strip composite failed:', err);
     return overlay;

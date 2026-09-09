@@ -5,10 +5,7 @@ import { groundFor } from './card-colors';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
 import { absoluteAssetUrl } from './storage';
-
-function appUrl(): string {
-  return (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-}
+import { appUrl } from './app-url';
 
 interface ServiceAccountJson {
   client_email: string;

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { VERTICALS } from "@/lib/verticals";
+import { appUrl } from '@/lib/app-url';
 
 /**
  * Only pages meant to be found. Everything customer- or staff-scoped is left
@@ -7,7 +8,7 @@ import { VERTICALS } from "@/lib/verticals";
  * about them belongs in an index, and the rest is behind a login.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  const base = appUrl();
   const now = new Date();
 
   return [

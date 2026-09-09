@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import dbConnect from "@/lib/db";
 import { businessRepository } from "@/repositories/business.repository";
 import SettingsForm from "@/components/settings/SettingsForm";
+import PasswordForm from "@/components/settings/PasswordForm";
 import { assetSrc } from "@/lib/storage";
 
 export default async function SettingsPage() {
@@ -42,6 +43,8 @@ export default async function SettingsPage() {
           },
         }}
       />
+
+      <PasswordForm email={session.user.email} />
     </div>
   );
 }

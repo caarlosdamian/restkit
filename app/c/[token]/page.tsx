@@ -6,6 +6,7 @@ import { qrDataUrl } from '@/lib/qr';
 import LoyaltyCard from '@/components/loyalty/LoyaltyCard';
 import dbConnect from '@/lib/db';
 import { notFound } from 'next/navigation';
+import { appUrl } from '@/lib/app-url';
 
 export default async function CustomerPassPage({
   params,
@@ -34,8 +35,8 @@ export default async function CustomerPassPage({
 
   // The same value the wallet pass encodes in its barcode, so the card on this
   // page and the one in the customer's wallet carry the same code.
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-  const qr = await qrDataUrl(`${appUrl}/c/${token}`, 400);
+  const base = appUrl();
+  const qr = await qrDataUrl(`${base}/c/${token}`, 400);
 
   const googleUrl = `/api/passes/google/${customerId}`;
   const appleUrl = `/api/passes/apple/${customerId}`;

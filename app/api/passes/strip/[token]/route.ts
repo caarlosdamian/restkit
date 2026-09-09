@@ -37,8 +37,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       brandColor: business.branding?.primaryColor || '#4f46e5',
       backgroundUrl: config.card.stripImage,
       customIconUrl: config.card.customIconUrl,
-      // Google's hero slot is 1032×336; the strip's box is the same 3:1, so @3x
-      // lands almost exactly on it without a second layout.
+      // Google's hero slot is 1032×336 (3.07:1) and the canvas is 2.60:1, so
+      // Google crops it back to roughly the 375×123 content band — which is
+      // exactly what the band is for. @3x is 1125 wide, just over the slot.
       scale: 3,
     });
   } catch (err) {

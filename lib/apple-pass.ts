@@ -9,6 +9,7 @@ import { findStampIcon } from './stamp-icons';
 import type { ICustomer } from '@/models/Customer';
 import type { IBusiness } from '@/models/Business';
 import { readAsset } from './storage';
+import { appUrl } from './app-url';
 
 // Apple's design guide caps the logo at 160x50pt (1x); @2x/@3x are the same
 // box scaled up. `fit: 'inside'` preserves aspect ratio without cropping.
@@ -88,7 +89,7 @@ export async function generateApplePass(
     );
   }
 
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const base = appUrl();
   const primaryColor = business.branding?.primaryColor || '#4f46e5';
 
   const serialNumber = (customer._id as { toString(): string }).toString();
@@ -159,7 +160,7 @@ export async function generateApplePass(
     backgroundColor: cssRgb(r, g, b),
     foregroundColor: fg,
     labelColor: label,
-    webServiceURL: `${appUrl}/api/wallet/apple`,
+    webServiceURL: `${base}/api/wallet/apple`,
     authenticationToken: authToken,
     storeCard: {
       headerFields: layout.header,
@@ -175,7 +176,7 @@ export async function generateApplePass(
       {
         // The opaque token, never the raw ObjectId — ObjectIds are sequential
         // enough that one leaked id opens a path to guessing its neighbours.
-        message: `${appUrl}/c/${customer.publicToken}`,
+        message: `${base}/c/${customer.publicToken}`,
         format: 'PKBarcodeFormatQR',
         messageEncoding: 'iso-8859-1',
         altText: customer.name,

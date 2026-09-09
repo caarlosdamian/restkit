@@ -9,10 +9,27 @@ const stripeMock = {
   customers: { create: vi.fn(async () => ({ id: 'cus_new' })) },
   checkout: { sessions: { create: vi.fn(async () => ({ url: 'https://checkout.stripe.test/session' })) } },
 };
-let priceId: string | undefined = 'price_test';
+// `priceMisconfigured` stands in for a bad STRIPE_PRICE_* env var. The real
+// requirePriceId THROWS rather than returning undefined, so the mock has to as
+// well — a mock that returns undefined would let the route sail on to Stripe
+// and the test would pass while production 500s from inside the SDK.
+const { priceState, MockPriceError } = vi.hoisted(() => {
+  class MockPriceError extends Error {
+    readonly code = 'STRIPE_PRICE_MISCONFIGURED';
+    constructor(readonly envKey: string, detail: string) {
+      super(`${envKey}: ${detail}`);
+    }
+  }
+  return { priceState: { id: 'price_test' as string | undefined }, MockPriceError };
+});
+
 vi.mock('@/lib/stripe', () => ({
   requireStripe: () => stripeMock,
-  priceIdFor: () => priceId,
+  StripePriceMisconfiguredError: MockPriceError,
+  requirePriceId: () => {
+    if (!priceState.id) throw new MockPriceError('STRIPE_PRICE_PRO_MONTHLY', 'falta la variable de entorno.');
+    return priceState.id;
+  },
 }));
 
 import { POST as checkout } from '@/app/api/billing/checkout/route';
@@ -22,7 +39,7 @@ afterAll(stopTestDb);
 beforeEach(async () => {
   await clearTestDb();
   resetAuthState();
-  priceId = 'price_test';
+  priceState.id = 'price_test';
   stripeMock.customers.create.mockClear();
   stripeMock.checkout.sessions.create.mockClear();
 });
@@ -68,14 +85,38 @@ describe('POST /api/billing/checkout', () => {
     expect(res.status).toBe(200);
   });
 
-  it('500s when the Stripe price id is not configured', async () => {
+  it('500s with the variable to fix when the Stripe price id is misconfigured', async () => {
     const businessId = oid();
     await makeBusiness(businessId);
     signInAs(businessId, 'OWNER');
-    priceId = undefined;
+    priceState.id = undefined;
 
     const res = await checkout(req({ plan: 'pro', period: 'monthly' }));
     expect(res.status).toBe(500);
+    // The owner sees this, so it has to name what to change — not "algo salió mal".
+    const body = await res.json();
+    expect(body.code).toBe('STRIPE_PRICE_MISCONFIGURED');
+    expect(body.error).toContain('STRIPE_PRICE_PRO_MONTHLY');
+    // And nothing was charged for: no Stripe session was ever opened.
+    expect(stripeMock.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('explains a price Stripe cannot find, which is always a mode or account mix-up', async () => {
+    const businessId = oid();
+    await makeBusiness(businessId);
+    signInAs(businessId, 'OWNER');
+    // What Stripe answers for a live price used under a test key. The id is
+    // well-formed, so nothing before this point can catch it.
+    stripeMock.checkout.sessions.create.mockRejectedValueOnce(
+      Object.assign(new Error('No such price'), { code: 'resource_missing', type: 'StripeInvalidRequestError' })
+    );
+
+    const res = await checkout(req({ plan: 'lite', period: 'annual' }));
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.code).toBe('STRIPE_PRICE_NOT_FOUND');
+    expect(body.error).toContain('STRIPE_PRICE_LITE_ANNUAL');
+    expect(body.error).toMatch(/modo (test|live)/);
   });
 
   it('creates a customer + checkout session and returns the url', async () => {

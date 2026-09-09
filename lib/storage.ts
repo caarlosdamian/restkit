@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { randomBytes } from 'crypto';
+import { appUrl } from './app-url';
 
 /**
  * Where brand assets live.
@@ -44,9 +45,6 @@ export class StorageNotConfiguredError extends Error {
   }
 }
 
-function appUrl(): string {
-  return (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
-}
 
 const EXT_BY_TYPE: Record<string, string> = {
   'image/png': 'png',

@@ -5,6 +5,7 @@ import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { requireStripe } from '@/lib/stripe';
+import { appUrl } from '@/lib/app-url';
 
 /**
  * Opens the Stripe Billing Portal so the owner can update payment methods,
@@ -29,10 +30,10 @@ export async function POST() {
     );
   }
 
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const base = appUrl();
   const portal = await requireStripe().billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${appUrl}/dashboard/billing`,
+    return_url: `${base}/dashboard/billing`,
   });
 
   return NextResponse.json({ url: portal.url });
