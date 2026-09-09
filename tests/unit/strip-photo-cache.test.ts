@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
  * A single failed fetch produced a card WITHOUT the photo at HTTP 200 — no
  * error to see, nothing to retry, the picture simply gone.
  */
-const reads = vi.hoisted(() => ({ count: 0, fail: 0, bytes: Buffer.alloc(0) }));
+const reads = vi.hoisted(() => ({ count: 0, fail: 0, bytes: Buffer.alloc(0) as Buffer }));
 
 vi.mock('@/lib/storage', () => ({
   readAsset: vi.fn(async () => {
@@ -33,7 +33,7 @@ const config = (photoPlacement: 'side' | 'background') =>
     },
   } as never);
 
-const render = (url: string, scale = 1) =>
+const render = (url: string, scale: 1 | 2 | 3 = 1) =>
   renderStrip({
     currentVisits: 3,
     cashbackBalance: 0,
@@ -69,7 +69,7 @@ beforeEach(async () => {
   const sharp = (await import('sharp')).default;
   const px = Buffer.alloc(600 * 600 * 3);
   for (let i = 0; i < px.length; i++) px[i] = (i * 37) % 251;
-  reads.bytes = await sharp(px, { raw: { width: 600, height: 600, channels: 3 } }).jpeg().toBuffer();
+  reads.bytes = await sharp(px, { raw: { width: 600, height: 600, channels: 3 as const } }).jpeg().toBuffer();
   reads.count = 0;
   reads.fail = 0;
   __clearAssetCache();

@@ -5,6 +5,7 @@
  */
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import { spawn } from 'node:child_process';
+import { writeFileSync, rmSync } from 'node:fs';
 
 const PORT = process.env.E2E_PORT || '3100';
 
@@ -17,6 +18,11 @@ const mode = process.env.E2E_PROD === '1' ? 'start' : 'dev';
 const mongo = await MongoMemoryServer.create();
 const uri = mongo.getUri('restkit-e2e');
 console.log(`[e2e] in-memory MongoDB at ${uri} (next ${mode})`);
+
+// The Playwright process seeds demo data directly (see e2e/seed.ts) and is a
+// different process from this one, so hand it the address of the database.
+const URI_FILE = new URL('./.mongo-uri', import.meta.url);
+writeFileSync(URI_FILE, uri);
 
 const next = spawn('npx', ['next', mode, '-p', PORT], {
   stdio: 'inherit',
@@ -36,6 +42,7 @@ const next = spawn('npx', ['next', mode, '-p', PORT], {
 });
 
 async function shutdown(code) {
+  rmSync(URI_FILE, { force: true });
   await mongo.stop().catch(() => {});
   process.exit(code ?? 0);
 }

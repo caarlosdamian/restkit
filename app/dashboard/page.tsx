@@ -7,8 +7,6 @@ import Business from "@/models/Business";
 import dbConnect from "@/lib/db";
 import { Users, ScanLine, Gift, TrendingUp, UserPlus, ChevronRight, Check } from "lucide-react";
 import Link from "next/link";
-import SeedButton from "@/components/dashboard/SeedButton";
-import SeedDataButton from "@/components/dashboard/SeedDataButton";
 
 export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -26,11 +24,10 @@ export default async function DashboardPage() {
     );
   }
 
-  // Fetch business to get restaurant code
+  // The card's wording ("visitas", "sellos"…) comes off the business.
   await dbConnect();
   const businessId = session.user.businessId as string;
   const business = await Business.findById(businessId);
-  const restaurantCode = business?.slug || "unknown";
 
   const stats = await analyticsService.getDashboardStats(businessId);
   const maxChart = Math.max(...stats.chartData.map((d) => d.count), 1);
@@ -52,11 +49,6 @@ export default async function DashboardPage() {
           <UserPlus size={15} /> Nuevo Cliente
         </Link>
       </div>
-
-      {/* Restaurant Code & Seed Data */}
-      {(session.user.role === "OWNER" || session.user.role === "ADMIN") && (
-        <SeedDataButton restaurantCode={restaurantCode} />
-      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

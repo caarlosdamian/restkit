@@ -40,6 +40,21 @@ function clientKey(req: Request, slug: string): string {
   return `join:${slug}:${ip}`;
 }
 
+/**
+ * One wording, several reasons.
+ *
+ * The customer always reads the same sentence — they cannot act on the
+ * difference between "your number is registered" and "your number is
+ * registered in another format". The `code` carries the distinction for us,
+ * which is what makes a report from production diagnosable instead of a guess.
+ */
+function refuse(code: 'ALREADY_ENROLLED' | 'ALREADY_ENROLLED_FORMAT' | 'ALREADY_ENROLLED_RACE') {
+  return NextResponse.json(
+    { error: 'Ya tienes una tarjeta con este teléfono. Pídela en el mostrador.', code },
+    { status: 409 }
+  );
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const key = clientKey(req, slug);
@@ -81,16 +96,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   // client can mint, not just on how often it can guess wrong.
   recordAttempt(key, MAX_PER_WINDOW, WINDOW_MS);
 
-  const existing = await Customer.findOne({ businessId: business._id, phone });
-  if (existing) {
+  // ── Does this person already have a card? ────────────────────────────────
+  // Two lookups, because a phone is not stored in one shape. Self-enrolment
+  // writes 10 bare digits; the till and the seed data write what the cashier
+  // typed — "+52 55 1234 5678". An exact match alone therefore MISSES a real
+  // customer and hands them a second card. The exact query runs first because
+  // it uses the unique index; the tolerant one is scoped to businessId (also
+  // indexed) so it only ever scans that one business's customers.
+  const exact = await Customer.findOne({ businessId: business._id, phone }).select('_id');
+  if (exact) {
     // Deliberately no token. See the note at the top of this file.
-    return NextResponse.json(
-      {
-        error: 'Ya tienes una tarjeta con este teléfono. Pídela en el mostrador.',
-        code: 'ALREADY_ENROLLED',
-      },
-      { status: 409 }
+    return refuse('ALREADY_ENROLLED');
+  }
+
+  const sameDigits = await Customer.findOne({
+    businessId: business._id,
+    phone: { $regex: `${phone.split('').join('\\D*')}$` },
+  }).select('_id phone');
+  if (sameDigits) {
+    // Same human, stored in another format. Refused for the same reason, but
+    // under its own code: this one means the card exists and our own writers
+    // disagree about how to spell a phone number.
+    console.warn(
+      `Join: ${phone} matched an existing customer stored as "${sameDigits.phone}" — phone formats are not normalised.`
     );
+    return refuse('ALREADY_ENROLLED_FORMAT');
   }
 
   try {
@@ -107,17 +137,60 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
     return NextResponse.json({ token: customer.publicToken }, { status: 201 });
   } catch (err) {
-    // Two taps on a slow connection race to the same phone.
-    if ((err as { code?: number }).code === 11000) {
+    const duplicate = err as { code?: number; keyPattern?: Record<string, unknown> };
+    if (duplicate.code !== 11000) {
+      console.error('Self-enrolment failed:', err);
       return NextResponse.json(
-        {
-          error: 'Ya tienes una tarjeta con este teléfono. Pídela en el mostrador.',
-          code: 'ALREADY_ENROLLED',
-        },
-        { status: 409 }
+        { error: 'No se pudo crear tu tarjeta', code: 'ENROLMENT_FAILED' },
+        { status: 500 }
       );
     }
-    console.error('Self-enrolment failed:', err);
-    return NextResponse.json({ error: 'No se pudo crear tu tarjeta' }, { status: 500 });
+
+    // ⚠️ WHICH index collided is the whole story. This used to answer
+    // ALREADY_ENROLLED for any duplicate key. A stale `sparse` unique on
+    // (businessId, email) — compound, so it indexes every document that has a
+    // businessId, email or not — put every email-less customer on
+    // (businessId, null). The FIRST self-enrolment at a business worked and
+    // every one after it collided, so a stranger with a brand-new number was
+    // told they already had a card and sent to a counter that had never heard
+    // of them. Only a `phone` collision is that customer's own card.
+    const conflict = Object.keys(duplicate.keyPattern ?? {}).join('+') || 'unknown';
+
+    if (duplicate.keyPattern && 'phone' in duplicate.keyPattern) {
+      // Two taps on a slow connection racing for the same phone. Real, and its
+      // own code so it is never confused with the pre-check above.
+      return refuse('ALREADY_ENROLLED_RACE');
+    }
+
+    // Dump the live index definitions: this is the one moment we know the
+    // database disagrees with the schema, and the shape of that disagreement
+    // is the answer. Mongoose cannot alter an existing index, so a database
+    // older than the schema keeps `sparse` for ever with nothing reporting it.
+    let indexes = 'unavailable';
+    try {
+      indexes = JSON.stringify(
+        (await Customer.collection.indexes()).map((i) => ({
+          name: i.name,
+          unique: i.unique ?? false,
+          sparse: i.sparse ?? false,
+          partial: i.partialFilterExpression ?? null,
+        }))
+      );
+    } catch {
+      /* diagnostics must never replace the error they describe */
+    }
+    console.error(
+      `Self-enrolment hit a duplicate key on ${conflict}, which is NOT the phone. ` +
+        `Run scripts/fix-customer-indexes.mjs. Live indexes: ${indexes}`
+    );
+
+    return NextResponse.json(
+      {
+        error: 'No se pudo crear tu tarjeta. Pídela en el mostrador.',
+        code: 'ENROLMENT_CONFLICT',
+        conflict,
+      },
+      { status: 500 }
+    );
   }
 }
