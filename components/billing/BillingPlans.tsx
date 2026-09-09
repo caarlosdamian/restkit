@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { readJson } from "@/lib/api-client";
 import {
   PLANS,
   priceFor,
@@ -34,8 +35,9 @@ export default function BillingPlans({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan, period }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data.error || "No se pudo iniciar el pago");
+      const { data, error: failure } = await readJson<{ url?: string }>(res);
+      if (failure) throw new Error(failure);
+      if (!data?.url) throw new Error("No se pudo iniciar el pago");
       window.location.assign(data.url); // Stripe-hosted checkout
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar el pago");

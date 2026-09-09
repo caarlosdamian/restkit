@@ -119,6 +119,27 @@ describe('POST /api/billing/checkout', () => {
     expect(body.error).toMatch(/modo (test|live)/);
   });
 
+  it('answers with JSON even when Stripe itself blows up', async () => {
+    const businessId = oid();
+    await makeBusiness(businessId);
+    signInAs(businessId, 'OWNER');
+    // requireStripe() throws this when STRIPE_SECRET_KEY is unset, and the SDK
+    // throws on a bad key. Uncaught, it returned a BODY-LESS 500 — and the
+    // browser's res.json() then failed with "Unexpected end of JSON input",
+    // showing the owner a parser error instead of the missing configuration.
+    stripeMock.checkout.sessions.create.mockRejectedValueOnce(new Error('Invalid API Key provided'));
+
+    const res = await checkout(req({ plan: 'pro', period: 'monthly' }));
+    expect(res.status).toBe(500);
+
+    const raw = await res.text();
+    expect(raw.length).toBeGreaterThan(0);
+    const body = JSON.parse(raw);
+    expect(body.code).toBe('CHECKOUT_FAILED');
+    // The owner is the person who fixes the configuration, so they get told.
+    expect(body.error).toContain('Invalid API Key');
+  });
+
   it('creates a customer + checkout session and returns the url', async () => {
     const businessId = oid();
     await makeBusiness(businessId);

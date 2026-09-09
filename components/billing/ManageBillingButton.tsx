@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
+import { readJson } from "@/lib/api-client";
 
 /** Opens the Stripe Billing Portal (update card, change plan, cancel). */
 export default function ManageBillingButton() {
@@ -13,8 +14,9 @@ export default function ManageBillingButton() {
     setError("");
     try {
       const res = await fetch("/api/billing/portal", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data.url) throw new Error(data.error || "No se pudo abrir el portal");
+      const { data, error: failure } = await readJson<{ url?: string }>(res);
+      if (failure) throw new Error(failure);
+      if (!data?.url) throw new Error("No se pudo abrir el portal");
       window.location.assign(data.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
