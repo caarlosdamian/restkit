@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
-import { renderStrip } from '@/lib/strip-render';
+import { renderStrip, ImageRenderUnavailableError } from '@/lib/strip-render';
 import { loyaltyConfig, DEFAULT_LOYALTY } from '@/lib/loyalty';
 import type { CardGround, LoyaltyMechanic, PhotoPlacement, StampStyle } from '@/models/Business';
 
@@ -54,15 +54,28 @@ export async function GET(req: Request) {
     },
   } as never);
 
-  const png = await renderStrip({
-    currentVisits: Math.max(0, Number(q.get('stamps') ?? 0)),
-    cashbackBalance: Number(q.get('balance') ?? 0),
-    config,
-    brandColor: `#${(q.get('color') || '10b981').replace('#', '')}`,
-    backgroundUrl: config.card.stripImage,
-    customIconUrl: config.card.customIconUrl,
-    scale: 2,
-  });
+  let png: Buffer;
+  try {
+    png = await renderStrip({
+      currentVisits: Math.max(0, Number(q.get('stamps') ?? 0)),
+      cashbackBalance: Number(q.get('balance') ?? 0),
+      config,
+      brandColor: `#${(q.get('color') || '10b981').replace('#', '')}`,
+      backgroundUrl: config.card.stripImage,
+      customIconUrl: config.card.customIconUrl,
+      scale: 2,
+    });
+  } catch (err) {
+    // This lands inside an <img>, so an HTML error page shows the owner a
+    // broken-image icon and nothing else. Say what happened in a header the
+    // form can read, and log the cause where a deployment can be diagnosed.
+    const unavailable = err instanceof ImageRenderUnavailableError;
+    console.error('Strip preview failed:', err);
+    return new Response(null, {
+      status: unavailable ? 503 : 500,
+      headers: { 'X-Render-Error': unavailable ? err.code : 'RENDER_FAILED' },
+    });
+  }
 
   return new Response(png as unknown as BodyInit, {
     headers: {

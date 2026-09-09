@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import type Sharp from 'sharp';
 import { readAsset } from './storage';
 import { findStampIcon, STAMP_STROKE } from './stamp-icons';
 import { stampState, formatMXN } from './loyalty';
@@ -320,8 +320,43 @@ const fetchImage = readAsset;
  *  picture of the place, not so much that a 10-stamp grid stops fitting. */
 export const SIDE_PHOTO_FRACTION = 0.36;
 
+/** The image renderer could not be loaded at all — a broken deployment, not a
+ *  bad request. Separated from a render failure so a route can say which. */
+export class ImageRenderUnavailableError extends Error {
+  readonly code = 'IMAGE_RENDER_UNAVAILABLE';
+  constructor(cause: unknown) {
+    super(`No se pudo cargar el renderizador de imágenes: ${(cause as Error)?.message ?? cause}`);
+  }
+}
+
+/**
+ * sharp is loaded on demand, never at module scope.
+ *
+ * It is a native binding, and the one thing it does on a bad deployment is
+ * fail to load — which, as a top-level import, took the whole route module
+ * down with it. Every handler in the file then answered 500 before running a
+ * line of its own: `/api/passes/strip/<garbage>` returned 500 instead of 404,
+ * and the dashboard preview got an HTML error page inside an <img>, so the
+ * owner saw a broken-image icon and nothing else. Loading it here keeps the
+ * failure inside the one call that needs it.
+ *
+ * (What broke: sharp 0.35.x cannot resolve its libvips binary in a Turbopack
+ * build on Vercel — see the pin in package.json.)
+ */
+let sharpModule: typeof Sharp | null = null;
+async function loadSharp(): Promise<typeof Sharp> {
+  if (sharpModule) return sharpModule;
+  try {
+    sharpModule = (await import('sharp')).default;
+    return sharpModule;
+  } catch (err) {
+    throw new ImageRenderUnavailableError(err);
+  }
+}
+
 /** Renders the strip to a PNG at the requested scale. */
 export async function renderStrip(input: StripInput): Promise<Buffer> {
+  const sharp = await loadSharp();
   const scale = input.scale ?? 1;
   const w = STRIP_W * scale;
   const h = STRIP_H * scale;
