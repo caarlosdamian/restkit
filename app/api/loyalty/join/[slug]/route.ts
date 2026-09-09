@@ -181,7 +181,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     }
     console.error(
       `Self-enrolment hit a duplicate key on ${conflict}, which is NOT the phone. ` +
-        `Run scripts/fix-customer-indexes.mjs. Live indexes: ${indexes}`
+        `Run scripts/fix-indexes.mjs. Live indexes: ${indexes}`
     );
 
     return NextResponse.json(
