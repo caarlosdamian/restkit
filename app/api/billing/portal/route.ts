@@ -12,6 +12,23 @@ import { appUrl } from '@/lib/app-url';
  * change plan, or cancel. OWNER only. Returns the portal URL to redirect to.
  */
 export async function POST() {
+  try {
+    return await portal();
+  } catch (err) {
+    // Same rule as checkout: an empty body reaches the browser as a JSON
+    // parser error and hides whatever actually went wrong.
+    console.error('Billing portal failed:', err);
+    return NextResponse.json(
+      {
+        error: `No se pudo abrir el portal: ${err instanceof Error ? err.message : 'error desconocido'}`,
+        code: 'PORTAL_FAILED',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function portal() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.businessId || session.user.role !== 'OWNER') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

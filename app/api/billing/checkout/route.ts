@@ -14,6 +14,33 @@ import { appUrl } from '@/lib/app-url';
  * billing. Reuses the business's Stripe customer across upgrades.
  */
 export async function POST(req: Request) {
+  try {
+    return await checkout(req);
+  } catch (err) {
+    console.error('Checkout failed:', err);
+    return NextResponse.json(
+      {
+        error: `No se pudo iniciar el pago: ${err instanceof Error ? err.message : 'error desconocido'}`,
+        code: 'CHECKOUT_FAILED',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * ⚠️ **A route handler must never answer with an empty body.** An uncaught
+ * throw here returns a body-less 500, and the browser's `res.json()` then
+ * fails with "Unexpected end of JSON input" — the owner sees a JSON parser
+ * error instead of the actual problem, and so do we. Several things in this
+ * handler can throw: `requireStripe()` when STRIPE_SECRET_KEY is unset, the
+ * Stripe SDK on a bad key or a network blip, `dbConnect`, and a businessId
+ * that is not a valid ObjectId.
+ *
+ * The message is passed through because this endpoint is OWNER-only and the
+ * owner is the person who has to fix the configuration.
+ */
+async function checkout(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.businessId || session.user.role !== 'OWNER') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
