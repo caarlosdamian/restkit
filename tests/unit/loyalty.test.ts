@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import path from 'path';
+import { existsSync, readFileSync } from 'fs';
 import {
   stampState,
   accrualFor,
@@ -581,6 +583,59 @@ describe('what the card art says', () => {
     expect(svg).toContain('¡PREMIO LISTO!');
     expect(svg).toContain('Un café gratis');
     expect(svg).not.toContain('Te faltan');
+  });
+
+  it('draws nothing the card font cannot draw', () => {
+    // librsvg has no fallback chain: a codepoint the vendored font does not
+    // map becomes a .notdef box on every customer's wallet card. Geist has no
+    // emoji and no ★ — verified against its cmap, not by eye, because macOS
+    // renders both perfectly via CoreText and hides the bug completely.
+    const svg = caption(10, { required: 10, rewardDescription: '🎉 Café ☕ gratis' });
+    expect(svg).toContain('Café gratis');
+    expect(svg).not.toMatch(/[\u{10000}-\u{10FFFF}]/u);
+    expect(svg).not.toMatch(/[\u2600-\u27BF]/);
+  });
+
+  it('keeps the accents and typography Spanish actually needs', () => {
+    // The flip side: the sanitiser must not be a blunt ASCII filter. All of
+    // these are in the font.
+    const svg = caption(10, { required: 10, rewardDescription: '2 piñas — «º» … ½ ™' });
+    expect(svg).toContain('2 piñas — «º» … ½ ™');
+  });
+});
+
+describe('the fonts the card is drawn with', () => {
+  // A serverless runtime ships no fonts at all, so these files are the only
+  // reason the card has words on it rather than boxes.
+  const dir = path.join(process.cwd(), 'assets', 'fonts');
+
+  it('ships the weights the strip asks for', () => {
+    // The SVG uses 500 and 700 and nothing else.
+    expect(existsSync(path.join(dir, 'Geist-Medium.ttf'))).toBe(true);
+    expect(existsSync(path.join(dir, 'Geist-Bold.ttf'))).toBe(true);
+    // Vendored OFL font: the licence travels with it.
+    expect(existsSync(path.join(dir, 'OFL.txt'))).toBe(true);
+  });
+
+  it('ships a fontconfig that points at its own directory', () => {
+    const conf = readFileSync(path.join(dir, 'fonts.conf'), 'utf-8');
+    // Relative to the config file, so the same file works from a checkout and
+    // from /var/task without anyone injecting an absolute path.
+    expect(conf).toContain('<dir prefix="relative">.</dir>');
+    // The function filesystem is read-only apart from /tmp.
+    expect(conf).toMatch(/<cachedir>\/tmp\//);
+  });
+
+  it('points fontconfig at them before sharp is loaded', async () => {
+    // Set as a side effect of the first render, because libvips reads the
+    // environment once when it initialises.
+    await renderStrip({
+      currentVisits: 1,
+      cashbackBalance: 0,
+      config: sellos({ required: 5 }),
+      brandColor: '#0b7d57',
+    });
+    expect(process.env.FONTCONFIG_PATH).toBe(dir);
   });
 });
 

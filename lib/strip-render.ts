@@ -1,4 +1,6 @@
 import type Sharp from 'sharp';
+import path from 'path';
+import { existsSync } from 'fs';
 import { readAsset } from './storage';
 import { findStampIcon, STAMP_STROKE } from './stamp-icons';
 import { stampState, formatMXN } from './loyalty';
@@ -147,11 +149,36 @@ function gridFor(count: number): { cols: number; rows: number } {
   return { cols: Math.ceil(count / 3), rows: 3 };
 }
 
+/**
+ * XML-escapes text for the SVG **and drops what the card font cannot draw.**
+ *
+ * The strings on this card are owner-typed — a reward description, the name of
+ * a unit — and librsvg has no fallback chain to fall back to: whatever Geist
+ * does not map is drawn as a .notdef box. So "🎉 Café gratis" would ship to
+ * every customer's wallet as a box followed by the words. Geist covers all of
+ * Latin-1 and the typographic marks (— … « » º ª ™ →), which is everything a
+ * Mexican business actually types; what it lacks is emoji and dingbats.
+ *
+ * Verified against the font's own cmap, not by eye — see the note on ★ below.
+ */
 function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s
+    // Astral plane: every emoji lives here.
+    .replace(/[\u{10000}-\u{10FFFF}]/gu, '')
+    // Miscellaneous Symbols and Dingbats (★ ☕ ✔), plus the joiners that glue
+    // emoji sequences together and would otherwise be left behind.
+    .replace(/[\u2600-\u27BF\uFE0F\u200D]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
-const FONT = 'Helvetica Neue, Helvetica, Arial, sans-serif';
+// Geist, the same face the dashboard uses, vendored under assets/fonts and
+// wired up in `configureCardFonts` — a host font stack alone renders as boxes
+// wherever the host has no fonts, which is every serverless runtime.
+const FONT = 'Geist, Helvetica Neue, Helvetica, Arial, sans-serif';
 
 /* ------------------------------------------------------------------ svg */
 
@@ -284,7 +311,10 @@ export function stripSvg(
   const left = Math.max(0, required - state.stamps);
   const unit = left === 1 ? config.sellos.unitSingular : config.sellos.unitPlural;
   const caption = state.cardFull
-    ? `★ ¡PREMIO LISTO! · ${config.sellos.rewardDescription}`
+    // No ★ here, however much it wants one: Geist has no U+2605 and librsvg
+    // drew it as a hex box on the card. The line is bold and in the accent
+    // colour when it matters, which is the emphasis the star was for.
+    ? `¡PREMIO LISTO! · ${config.sellos.rewardDescription}`
     : `${left === 1 ? 'Te falta' : 'Te faltan'} ${left} ${unit} para tu premio`;
 
   // Over a photo a scrim keeps the caption readable whatever the picture is,
@@ -346,12 +376,40 @@ export class ImageRenderUnavailableError extends Error {
 let sharpModule: typeof Sharp | null = null;
 async function loadSharp(): Promise<typeof Sharp> {
   if (sharpModule) return sharpModule;
+  configureCardFonts();
   try {
     sharpModule = (await import('sharp')).default;
     return sharpModule;
   } catch (err) {
     throw new ImageRenderUnavailableError(err);
   }
+}
+
+/**
+ * Point fontconfig at the fonts we ship.
+ *
+ * ⚠️ **Vercel's runtime has no fonts installed — not even a generic
+ * `sans-serif`.** librsvg drew every character of the strip as a .notdef box:
+ * the stamps were perfect (they're paths) and every word on the card was tofu.
+ * A developer machine hides this completely, because macOS has Helvetica.
+ *
+ * Must run BEFORE sharp is imported: libvips initialises fontconfig when it
+ * loads, and the environment is read once. That ordering is the only reason
+ * this lives next to `loadSharp` instead of in the routes.
+ */
+function configureCardFonts(): void {
+  // An explicitly configured environment wins — a container that mounted its
+  // own font set should not be overridden by ours.
+  if (process.env.FONTCONFIG_PATH) return;
+  const dir = path.join(process.cwd(), 'assets', 'fonts');
+  if (!existsSync(path.join(dir, 'fonts.conf'))) {
+    // Not fatal: the card still renders, it just renders in whatever the host
+    // happens to have. Worth a line in the log, because on a host with nothing
+    // this is the difference between text and boxes.
+    console.warn(`Card fonts not found at ${dir} — text will use host fonts.`);
+    return;
+  }
+  process.env.FONTCONFIG_PATH = dir;
 }
 
 /** Renders the strip to a PNG at the requested scale. */
