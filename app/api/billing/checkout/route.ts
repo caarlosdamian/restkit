@@ -4,8 +4,9 @@ import { headers } from 'next/headers';
 import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
-import { requireStripe, priceIdFor } from '@/lib/stripe';
+import { requireStripe, requirePriceId, StripePriceMisconfiguredError } from '@/lib/stripe';
 import { toPlanId, toBillingPeriod } from '@/lib/plans';
+import { appUrl } from '@/lib/app-url';
 
 /**
  * Starts a Stripe Checkout session (mode: subscription) for the caller's
@@ -25,12 +26,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });
   }
 
-  const priceId = priceIdFor(plan, period);
-  if (!priceId) {
-    return NextResponse.json(
-      { error: `Precio no configurado para ${plan}/${period}. Falta la variable STRIPE_PRICE_*.` },
-      { status: 500 }
-    );
+  let priceId: string;
+  try {
+    priceId = requirePriceId(plan, period);
+  } catch (err) {
+    if (err instanceof StripePriceMisconfiguredError) {
+      // 500 because the deployment is wrong, not the request. The message names
+      // the variable so this is fixable without reading a server log.
+      console.error('Stripe price misconfigured:', err.message);
+      return NextResponse.json({ error: err.message, code: err.code }, { status: 500 });
+    }
+    throw err;
   }
 
   await dbConnect();
@@ -54,20 +60,43 @@ export async function POST(req: Request) {
     await business.save();
   }
 
-  const appUrl = (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const base = appUrl();
 
-  const checkout = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    // businessId travels on the subscription so the webhook can find the tenant
-    // even if it fires before we read the checkout.session object.
-    subscription_data: { metadata: { businessId: business._id.toString(), plan, period } },
-    metadata: { businessId: business._id.toString(), plan, period },
-    success_url: `${appUrl}/dashboard/billing?checkout=success`,
-    cancel_url: `${appUrl}/dashboard/billing?checkout=cancel`,
-    allow_promotion_codes: true,
-  });
+  let checkout;
+  try {
+    checkout = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      // businessId travels on the subscription so the webhook can find the tenant
+      // even if it fires before we read the checkout.session object.
+      subscription_data: { metadata: { businessId: business._id.toString(), plan, period } },
+      metadata: { businessId: business._id.toString(), plan, period },
+      success_url: `${base}/dashboard/billing?checkout=success`,
+      cancel_url: `${base}/dashboard/billing?checkout=cancel`,
+      allow_promotion_codes: true,
+    });
+  } catch (err) {
+    // ⚠️ A price id carries no hint of which MODE it belongs to, so a live price
+    // under a test key (or the reverse) looks perfectly well-formed and only
+    // fails here, as `resource_missing`. It is the last way this can be
+    // misconfigured, and the generic 500 it used to raise told the owner
+    // nothing at the exact moment they were trying to pay.
+    const stripeErr = err as { code?: string; type?: string };
+    if (stripeErr?.code === 'resource_missing') {
+      const envKey = `STRIPE_PRICE_${plan.toUpperCase()}_${period.toUpperCase()}`;
+      const keyMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test';
+      console.error(`Stripe rejected ${priceId} from ${envKey} (key is ${keyMode} mode):`, err);
+      return NextResponse.json(
+        {
+          error: `Stripe no encuentra el precio ${priceId}. Tu clave es de modo ${keyMode}, así que ${envKey} tiene que ser un precio del mismo modo y de la misma cuenta.`,
+          code: 'STRIPE_PRICE_NOT_FOUND',
+        },
+        { status: 500 }
+      );
+    }
+    throw err;
+  }
 
   return NextResponse.json({ url: checkout.url });
 }

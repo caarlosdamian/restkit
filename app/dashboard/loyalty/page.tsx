@@ -8,6 +8,7 @@ import { loyaltyConfig, formatMXN } from "@/lib/loyalty";
 import Link from "next/link";
 import { qrDataUrl } from "@/lib/qr";
 import JoinPoster from "@/components/loyalty/JoinPoster";
+import { appUrl } from '@/lib/app-url';
 import {
   Gift,
   Users,
@@ -55,8 +56,8 @@ export default async function LoyaltyPage({
 
   // The self-enrolment poster. Rendered server-side so the QR is ready in the
   // first paint — this is something an owner prints, not something they wait for.
-  const appUrl = (process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
-  const joinUrl = `${appUrl}/j/${business.slug}`;
+  const base = appUrl();
+  const joinUrl = `${base}/j/${business.slug}`;
   const joinQr = await qrDataUrl(joinUrl, 600);
   const pct = (n: number) => `${Math.round(n * 100)}%`;
 

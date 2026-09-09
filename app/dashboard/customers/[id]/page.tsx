@@ -14,6 +14,7 @@ import GoogleWallet from '@/components/dashboard/GoogleWallet';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ScanLine, Gift, QrCode, Wallet } from 'lucide-react';
+import { appUrl } from '@/lib/app-url';
 
 export default async function CustomerDetailPage({
   params,
@@ -47,8 +48,8 @@ export default async function CustomerDetailPage({
 
   const history = await loyaltyService.history(customerId, session.user.businessId, 0, 10);
 
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  const publicUrl = `${appUrl}/c/${customer.publicToken}`;
+  const base = appUrl();
+  const publicUrl = `${base}/c/${customer.publicToken}`;
   const passUrl = `/api/passes/apple/${customerId}`;
   const qrUrl = await qrDataUrl(publicUrl, 200);
 

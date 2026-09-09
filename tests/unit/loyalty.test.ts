@@ -17,6 +17,9 @@ import {
   saturation,
   stripSvg,
   renderStrip,
+  STRIP_W,
+  STRIP_H,
+  STRIP_CONTENT_H,
   readableInk,
   contrastRatio,
   groundFor,
@@ -813,5 +816,80 @@ describe('moving the photo around', () => {
     // passing on three copies of a photo-less strip.
     expect(background.equals(side)).toBe(false);
     expect(side.equals(footer)).toBe(false);
+  });
+});
+
+describe('the box Wallet actually gives the strip', () => {
+  // Measured off a real pass on a 1242x2688 iPhone: Wallet allotted the strip
+  // 375x145pt, not the 375x123 in Apple's table — that figure is for a strip
+  // with primaryFields drawn over it, and this pass ships none. Wallet scales a
+  // strip to FILL, so the 3.05:1 image we used to send was blown up 17% and
+  // lost 29pt off each edge: the fifth column of stamps and the last word of
+  // the caption were gone on the customer's phone.
+  const sellosCard = (ground: 'light' | 'brand' | 'dark' = 'light') =>
+    sellos({ required: 10 }, { ground, stampIcon: 'coffee' });
+
+  it('renders the canvas Wallet allots, at every scale', async () => {
+    const sharp = (await import('sharp')).default;
+    expect(STRIP_W / STRIP_H).toBeCloseTo(2.604, 3);
+
+    for (const scale of [1, 2, 3] as const) {
+      const meta = await sharp(
+        await renderStrip({
+          currentVisits: 3,
+          cashbackBalance: 0,
+          config: sellosCard(),
+          brandColor: '#ec4899',
+          scale,
+        })
+      ).metadata();
+      expect([meta.width, meta.height]).toEqual([STRIP_W * scale, STRIP_H * scale]);
+    }
+  });
+
+  it('draws nothing in the bleed, so a crop can only take margin', async () => {
+    // The invariant the fix rests on: the canvas is taller than the band the
+    // content is laid out in, and a client is free to crop back to its own box
+    // (Apple's documented 123, Google's 1032x336 hero). That is only safe while
+    // the margin holds nothing but ground.
+    const sharp = (await import('sharp')).default;
+    const scale = 2;
+    const margin = ((STRIP_H - STRIP_CONTENT_H) / 2) * scale;
+    const png = await renderStrip({
+      currentVisits: 3,
+      cashbackBalance: 0,
+      config: sellosCard('brand'),
+      brandColor: '#ec4899',
+      scale,
+    });
+
+    for (const top of [0, (STRIP_H - (STRIP_H - STRIP_CONTENT_H) / 2) * scale]) {
+      // Materialised first: sharp's stats() reads the INPUT image and ignores
+      // the pipeline, so measuring a chained .extract() silently measures the
+      // whole strip instead of the band.
+      const cropped = await sharp(png)
+        .extract({ left: 0, top, width: STRIP_W * scale, height: margin })
+        .png()
+        .toBuffer();
+      const band = await sharp(cropped).stats();
+      // One flat colour: every channel has zero spread.
+      for (const channel of band.channels.slice(0, 3)) expect(channel.stdev).toBe(0);
+    }
+  });
+
+  it('leaves no transparent bleed for the card to show through', async () => {
+    const sharp = (await import('sharp')).default;
+    for (const ground of ['light', 'brand', 'dark'] as const) {
+      const png = await renderStrip({
+        currentVisits: 3,
+        cashbackBalance: 0,
+        config: sellosCard(ground),
+        brandColor: '#ec4899',
+        scale: 1,
+      });
+      const { channels } = await sharp(png).stats();
+      expect(channels).toHaveLength(4);
+      expect(channels[3].min).toBe(255);
+    }
   });
 });
