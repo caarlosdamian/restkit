@@ -56,6 +56,29 @@ export type StampStyle = 'plain' | 'filled' | 'outline';
  */
 export type PhotoPlacement = 'background' | 'side' | 'footer';
 
+/**
+ * What the customer's phone says when their card changes.
+ *
+ * ⚠️ On Apple this is a `changeMessage`, and it is the ONLY thing that turns a
+ * silent background pass refresh into a notification — a field without one
+ * updates invisibly. The owner writes `{progreso}` where the new value should
+ * appear; `lib/card-layout.ts` converts that to Apple's `%@` token, because
+ * `%@` is not something to put in front of a taquería owner.
+ *
+ * Three messages rather than one, because the same field carries very
+ * different news: another stamp, a reward unlocked, a balance moved. The pass
+ * is rebuilt on every update, so the right one can be chosen from the state
+ * the customer is actually in.
+ */
+export interface ILoyaltyNotifications {
+  /** Progress moved and there is no reward waiting yet. */
+  stamp: string;
+  /** A reward just became claimable — the message that earns a visit back. */
+  rewardReady: string;
+  /** Cashback balance changed. */
+  cashback: string;
+}
+
 export interface ILoyaltyConfig {
   mechanic: LoyaltyMechanic;
   sellos: {
@@ -102,11 +125,27 @@ export interface ILoyaltyConfig {
     /** Card ground. Falls back to branding.primaryColor when unset. */
     bgColor?: string;
   };
-  /** Geofence for the Wallet pass (Fase 3). Unset = no location relevance. */
+  /** What the push says. See ILoyaltyNotifications. */
+  notifications: ILoyaltyNotifications;
+  /**
+   * Geofence for the Wallet pass. Unset = no location relevance.
+   *
+   * ⚠️ This is NOT the push notification — it is a lock-screen pass
+   * *suggestion*, a live state rather than an alert. iOS shows it while it
+   * believes the pass is relevant and clears it when that ends, which is why
+   * it cannot be swiped away: dismissing it does not end the condition. An
+   * owner standing in their own restaurant is permanently inside the zone.
+   */
   location?: {
     latitude: number;
     longitude: number;
+    /** Shown beside the pass on the lock screen. Supports `{progreso}`. */
     relevantText?: string;
+    /**
+     * Geofence radius in metres. Unset lets iOS pick, which is roughly 100m —
+     * a bubble that covers half a street for a café on a busy corner.
+     */
+    maxDistance?: number;
   };
 }
 
@@ -168,10 +207,16 @@ const BusinessSchema: Schema = new Schema(
           },
           bgColor:       { type: String },
         },
+        notifications: {
+          stamp:       { type: String },
+          rewardReady: { type: String },
+          cashback:    { type: String },
+        },
         location: {
           latitude:     { type: Number },
           longitude:    { type: Number },
           relevantText: { type: String },
+          maxDistance:  { type: Number },
         },
       },
     },

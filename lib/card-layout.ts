@@ -1,4 +1,4 @@
-import { formatMXN, stampState } from './loyalty';
+import { DEFAULT_LOYALTY, formatMXN, stampState } from './loyalty';
 import { CARD_FIELDS, defaultCardFields, SLOT_LIMITS } from './card-fields';
 import type { CardFieldConfig, CardFieldId } from './card-fields';
 import type { ILoyaltyConfig } from '@/models/Business';
@@ -59,6 +59,69 @@ export interface CardLayout {
   back: CardField[];
 }
 
+/* --------------------------------------------------------------- messages */
+
+/** What the owner types where the new value should appear. */
+export const VALUE_TOKEN = '{progreso}';
+
+/** Long enough for a real sentence, short enough to survive a lock screen. */
+export const MAX_MESSAGE = 120;
+
+/**
+ * Substitutes the owner's `{progreso}` for a value we resolve ourselves.
+ *
+ * Unlike `changeMessage`, a pass's `relevantText` is plain text — Apple never
+ * substitutes anything into it. But the pass is rebuilt per customer, so the
+ * placeholder can be filled here and the owner gets one token to learn instead
+ * of two rules.
+ */
+export function fillTokens(template: string, value: string, fallback: string): string {
+  const source = template.trim() || fallback.trim();
+  const filled = source.split(VALUE_TOKEN).join(value).replace(/\s+/g, ' ').trim();
+  if (!filled) return fillTokens(fallback, value, fallback);
+  return filled.length > MAX_RELEVANT_TEXT
+    ? `${filled.slice(0, MAX_RELEVANT_TEXT - 1).trimEnd()}…`
+    : filled;
+}
+
+/** A lock-screen suggestion shows one short line. */
+export const MAX_RELEVANT_TEXT = 60;
+
+/**
+ * Turns an owner-written message into an Apple `changeMessage`.
+ *
+ * ⚠️ Apple substitutes the field's NEW value for `%@`, and that token is the
+ * only dynamic part it understands. Asking a taquería owner to type `%@` is
+ * asking for a support call, so they write `{progreso}` and this converts it.
+ *
+ * Three rules, each of them a way the notification breaks quietly:
+ *  - **A literal `%` is escaped**, because the string is a format string: an
+ *    unescaped `% d` in "50% de descuento" is a conversion specifier, not text.
+ *  - **Only the first placeholder survives.** Apple fills one and prints the
+ *    rest verbatim, so a second `%@` would appear raw on the lock screen.
+ *  - **Never empty.** A blank changeMessage updates the pass in total silence,
+ *    which is indistinguishable from the push being broken.
+ */
+export function changeMessageFrom(template: string, fallback: string): string {
+  const source = template.trim() || fallback.trim();
+  const escape = (part: string) => part.replace(/%/g, '%%');
+
+  const [head, ...rest] = source.split(VALUE_TOKEN);
+  // Joining the tail without the token drops any further placeholders while
+  // keeping the words the owner wrote around them.
+  const message = rest.length ? `${escape(head)}%@${escape(rest.join(''))}` : escape(head);
+
+  const collapsed = message.replace(/\s+/g, ' ').trim();
+  if (!collapsed || collapsed === '%@') {
+    // Nothing but the placeholder is not a message; fall back rather than push
+    // a bare number at somebody.
+    return fallback.trim() === source ? source : changeMessageFrom(fallback, fallback);
+  }
+  return collapsed.length > MAX_MESSAGE
+    ? `${collapsed.slice(0, MAX_MESSAGE - 1).trimEnd()}…`
+    : collapsed;
+}
+
 /* ---------------------------------------------------------------- values */
 
 function monthYear(date?: Date | string): string {
@@ -86,7 +149,10 @@ export function resolveField(id: CardFieldId, input: CardLayoutInput): CardField
           key: 'progress',
           label: 'SALDO',
           value: formatMXN(balance),
-          changeMessage: 'Tu saldo ahora es %@.',
+          changeMessage: changeMessageFrom(
+            config.notifications.cashback,
+            DEFAULT_LOYALTY.notifications.cashback
+          ),
         };
       }
       return {
@@ -96,9 +162,15 @@ export function resolveField(id: CardFieldId, input: CardLayoutInput): CardField
           state.rewardsPending > 0
             ? config.sellos.rewardDescription
             : `${state.stamps} de ${required}`,
-        // Avoids gendered participles: the unit noun is owner-configurable and
-        // its grammatical gender is unknowable here.
-        changeMessage: 'Registro actualizado: %@',
+        // The pass is rebuilt on every update, so the message can be chosen
+        // from the state the customer has just landed in — "another stamp" and
+        // "your reward is ready" are different news through the same field.
+        changeMessage: changeMessageFrom(
+          state.rewardsPending > 0 ? config.notifications.rewardReady : config.notifications.stamp,
+          state.rewardsPending > 0
+            ? DEFAULT_LOYALTY.notifications.rewardReady
+            : DEFAULT_LOYALTY.notifications.stamp
+        ),
       };
 
     case 'reward':

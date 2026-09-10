@@ -2,12 +2,12 @@ import { PKPass } from 'passkit-generator';
 import sharp from 'sharp';
 import { solidColorPNG } from './png';
 import { loyaltyConfig, stampState, formatMXN } from './loyalty';
-import { buildCardLayout } from './card-layout';
+import { buildCardLayout, fillTokens } from './card-layout';
 import { groundFor, readableInk, relLuminance } from './card-colors';
 import { renderStripVariants } from './strip-render';
 import { findStampIcon } from './stamp-icons';
 import type { ICustomer } from '@/models/Customer';
-import type { IBusiness } from '@/models/Business';
+import type { IBusiness, ILoyaltyConfig } from '@/models/Business';
 import { readAsset } from './storage';
 import { appUrl } from './app-url';
 
@@ -71,6 +71,52 @@ async function iconVariants(
     console.error('Apple pass icon render failed:', err);
     return null;
   }
+}
+
+export interface PassLocation {
+  latitude: number;
+  longitude: number;
+  relevantText: string;
+  maxDistance?: number;
+}
+
+/**
+ * The pass's geofence, or nothing when the owner never set one.
+ *
+ * ⚠️ This is not the push notification. It is a lock-screen pass
+ * **suggestion**: a live state iOS maintains while it believes the pass is
+ * useful where you are, cleared when you leave. It cannot be swiped away,
+ * because swiping does not end the condition that put it there — which is why
+ * an owner testing inside their own restaurant sees it permanently.
+ *
+ * Two things are ours to set. `relevantText` is plain text (Apple substitutes
+ * nothing into it, unlike `changeMessage`), so `{progreso}` is filled in here
+ * — the owner learns one token, not two rules. And `maxDistance` is the only
+ * lever over how insistent it feels: leaving it unset hands iOS a roughly
+ * 100m bubble, half a street for a café on a corner.
+ */
+export function passLocations(
+  config: ILoyaltyConfig,
+  values: { progress: string }
+): { locations?: PassLocation[] } {
+  const location = config.location;
+  if (location?.latitude == null || location?.longitude == null) return {};
+
+  const isCashback = config.mechanic === 'cashback';
+  return {
+    locations: [
+      {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        relevantText: fillTokens(
+          location.relevantText ?? '',
+          values.progress,
+          isCashback ? 'Tienes {progreso} de saldo' : `Llevas {progreso} ${config.sellos.unitPlural}`
+        ),
+        ...(location.maxDistance ? { maxDistance: location.maxDistance } : {}),
+      },
+    ],
+  };
 }
 
 export async function generateApplePass(
@@ -182,21 +228,11 @@ export async function generateApplePass(
         altText: customer.name,
       },
     ],
-    ...(config.location?.latitude != null && config.location?.longitude != null
-      ? {
-          locations: [
-            {
-              latitude: config.location.latitude,
-              longitude: config.location.longitude,
-              relevantText:
-                config.location.relevantText ||
-                (isCashback
-                  ? `Tienes ${formatMXN(customer.stats.cashbackBalance ?? 0)} de saldo`
-                  : `Llevas ${state.stamps} de ${required} ${config.sellos.unitPlural}`),
-            },
-          ],
-        }
-      : {}),
+    ...passLocations(config, {
+      progress: isCashback
+        ? formatMXN(customer.stats.cashbackBalance ?? 0)
+        : `${state.stamps} de ${required}`,
+    }),
   };
 
   const files: Record<string, Buffer> = {

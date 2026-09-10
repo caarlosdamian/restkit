@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Check, Search, Upload, MapPin, Loader2, Stamp, Wallet } from "lucide-react";
+import { Save, Check, Search, Upload, MapPin, Loader2, Stamp, Wallet, Bell } from "lucide-react";
 import {
   STAMP_ICONS,
   STAMP_STROKE,
@@ -22,6 +22,14 @@ import {
   type CardFieldId,
   type SlotId,
 } from "@/lib/card-fields";
+import {
+  changeMessageFrom,
+  fillTokens,
+  VALUE_TOKEN,
+  MAX_MESSAGE,
+  MAX_RELEVANT_TEXT,
+} from "@/lib/card-layout";
+import { DEFAULT_LOYALTY } from "@/lib/loyalty";
 import PassPreview, { type Platform } from "./PassPreview";
 import type { CardGround, ILoyaltyConfig, PhotoPlacement, StampStyle } from "@/models/Business";
 
@@ -38,7 +46,8 @@ export interface WalletConfig {
     customIconUrl?: string;
     stripImage?: string;
   };
-  location?: { latitude?: number; longitude?: number; relevantText?: string };
+  notifications: { stamp: string; rewardReady: string; cashback: string };
+  location?: { latitude?: number; longitude?: number; relevantText?: string; maxDistance?: number };
 }
 
 interface Props {
@@ -53,6 +62,17 @@ interface Props {
  *  them. Both still save through PATCH /api/settings. */
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as StampCategory[];
+
+/** 0 = leave it to iOS, which uses roughly 100m. */
+const RADIUS_OPTIONS = [
+  { label: "En la puerta (30 m)", metres: 30 },
+  { label: "Media cuadra (75 m)", metres: 75 },
+  { label: "La cuadra (150 m)", metres: 150 },
+  { label: "Automático", metres: 0 },
+];
+
+const inputCls =
+  "w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20";
 
 export default function WalletForm({ initial, businessName, primaryColor, logo }: Props) {
   const [cfg, setCfg] = useState<WalletConfig>(initial);
@@ -70,6 +90,7 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
   const router = useRouter();
 
   const isCashback = cfg.mechanic === "cashback";
+  const unitOne = cfg.sellos.unitSingular || "un sello";
 
   const icons = useMemo(() => {
     const base = query ? searchStampIcons(query) : STAMP_ICONS;
@@ -79,6 +100,15 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
   // Derived, not synced: lowering `required` clamps the slider on the next
   // render instead of scheduling a second one.
   const preview = Math.min(previewRaw, cfg.sellos.required);
+
+  // Mirrors what lib/apple-pass.ts fills in per customer, so the preview is the
+  // real sentence rather than an impression of it.
+  const relevantSample = isCashback
+    ? `$${(cfg.cashback.threshold + 28.5).toLocaleString("es-MX")}`
+    : `${Math.max(1, preview)} de ${cfg.sellos.required}`;
+  const relevantFallback = isCashback
+    ? "Tienes {progreso} de saldo"
+    : `Llevas {progreso} ${cfg.sellos.unitPlural}`;
 
   // The preview panels run the real lib/card-layout.ts, which wants a full
   // config — the form only holds the parts an owner edits.
@@ -178,8 +208,7 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
     );
   }
 
-  const input =
-    "w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20";
+  const input = inputCls;
 
   return (
     <div className="grid lg:grid-cols-[1fr_20rem] gap-8 items-start">
@@ -572,6 +601,48 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
           )}
         </Section>
 
+        {/* ── What the push says ── */}
+        <Section
+          title="Mensaje de la notificación"
+          desc="Lo que aparece en el teléfono del cliente cuando su tarjeta cambia."
+        >
+          <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-snug text-gray-600">
+            Escribe <code className="rounded bg-white px-1 py-0.5 font-mono text-[0.7rem] font-semibold text-gray-900">{VALUE_TOKEN}</code>{" "}
+            donde quieras que aparezca el dato nuevo — los sellos que lleva, o su saldo.
+            Si dejas un mensaje vacío se usa el de siempre:{" "}
+            <strong>una tarjeta que se actualiza en silencio parece una tarjeta rota</strong>.
+          </p>
+
+          {isCashback ? (
+            <MessageField
+              label="Cuando cambia su saldo"
+              value={cfg.notifications.cashback}
+              onChange={(cashback) => setCfg({ ...cfg, notifications: { ...cfg.notifications, cashback } })}
+              sample={`$${(cfg.cashback.threshold + 28.5).toLocaleString("es-MX")}`}
+              fallback={DEFAULT_LOYALTY.notifications.cashback}
+            />
+          ) : (
+            <>
+              <MessageField
+                label={`Cuando gana ${unitOne}`}
+                value={cfg.notifications.stamp}
+                onChange={(stamp) => setCfg({ ...cfg, notifications: { ...cfg.notifications, stamp } })}
+                sample={`${Math.max(1, preview)} de ${cfg.sellos.required}`}
+                fallback={DEFAULT_LOYALTY.notifications.stamp}
+              />
+              <MessageField
+                label="Cuando ya puede reclamar su premio"
+                value={cfg.notifications.rewardReady}
+                onChange={(rewardReady) =>
+                  setCfg({ ...cfg, notifications: { ...cfg.notifications, rewardReady } })
+                }
+                sample={cfg.sellos.rewardDescription}
+                fallback={DEFAULT_LOYALTY.notifications.rewardReady}
+              />
+            </>
+          )}
+        </Section>
+
         {/* ── Geofence ── */}
         <Section
           title="Notificación por ubicación"
@@ -586,9 +657,77 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
             Usar mi ubicación actual
           </button>
           {cfg.location?.latitude != null && (
-            <p className="text-xs text-gray-500">
-              {cfg.location.latitude.toFixed(5)}, {cfg.location.longitude?.toFixed(5)}
-            </p>
+            <>
+              <p className="text-xs text-gray-500">
+                {cfg.location.latitude.toFixed(5)}, {cfg.location.longitude?.toFixed(5)}
+              </p>
+
+              <Field
+                label="Qué dice en la pantalla de bloqueo"
+                hint={`Usa ${VALUE_TOKEN} para mostrar su avance. Es una sola línea corta.`}
+              >
+                <input
+                  value={cfg.location.relevantText ?? ""}
+                  onChange={(e) =>
+                    setCfg({ ...cfg, location: { ...cfg.location, relevantText: e.target.value } })
+                  }
+                  maxLength={MAX_RELEVANT_TEXT + 20}
+                  placeholder={relevantFallback}
+                  className={input}
+                />
+                <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-900">
+                    <Wallet size={13} className="text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[0.6rem] font-bold uppercase tracking-wider text-gray-400">
+                      Al pasar cerca
+                    </p>
+                    <p className="text-xs font-medium text-gray-900 break-words">
+                      {fillTokens(cfg.location.relevantText ?? "", relevantSample, relevantFallback)}
+                    </p>
+                  </div>
+                </div>
+              </Field>
+
+              <Field
+                label="A qué distancia aparece"
+                hint="Más chico = aparece sólo si están prácticamente en la puerta."
+              >
+                <div className="flex flex-wrap gap-2">
+                  {RADIUS_OPTIONS.map((option) => {
+                    const active = (cfg.location?.maxDistance ?? 0) === option.metres;
+                    return (
+                      <button
+                        key={option.label}
+                        onClick={() =>
+                          setCfg({
+                            ...cfg,
+                            location: {
+                              ...cfg.location,
+                              maxDistance: option.metres || undefined,
+                            },
+                          })
+                        }
+                        className={`rounded-xl border-2 px-3 py-2 text-xs font-semibold transition-all ${
+                          active
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs leading-snug text-gray-600">
+                <strong>No es una notificación que se pueda descartar.</strong> iOS muestra la
+                tarjeta mientras cree que te sirve ahí, y la quita al alejarte — deslizarla no
+                apaga nada. Si estás dentro de tu propio local la vas a ver siempre; es normal.
+              </p>
+            </>
           )}
         </Section>
 
@@ -751,6 +890,65 @@ const PLACEMENTS: { id: PhotoPlacement; label: string; hint: string }[] = [
 ];
 
 /** A miniature of where the photo lands, drawn with the owner's own photo. */
+/**
+ * One notification message, with the phone's own rendering underneath it.
+ *
+ * The preview matters more than it looks: `{progreso}` is an abstraction, and
+ * an owner cannot tell whether "Llevas {progreso}" reads well until they see
+ * "Llevas 3 de 10". It also shows the fallback the moment the box is empty, so
+ * "blank means silent" never has to be discovered.
+ */
+function MessageField({
+  label,
+  value,
+  onChange,
+  sample,
+  fallback,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  sample: string;
+  fallback: string;
+}) {
+  const effective = value.trim() || fallback;
+  // Same conversion the pass builder does, then Apple's substitution — so this
+  // is the sentence the customer gets, not an approximation of it.
+  const preview = changeMessageFrom(effective, fallback).replace(/%@/g, sample).replace(/%%/g, "%");
+  const over = value.length > MAX_MESSAGE;
+
+  return (
+    <Field label={label}>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={MAX_MESSAGE + 40}
+        placeholder={fallback}
+        className={inputCls}
+      />
+      <div className="mt-2 flex items-start gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-900">
+          <Bell size={13} className="text-white" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[0.6rem] font-bold uppercase tracking-wider text-gray-400">
+            Así lo ve tu cliente
+          </p>
+          <p className="text-xs font-medium text-gray-900 break-words">{preview}</p>
+        </div>
+      </div>
+      {!value.trim() && (
+        <p className="mt-1 text-xs text-gray-400">Vacío: se usa el mensaje predeterminado.</p>
+      )}
+      {over && (
+        <p className="mt-1 text-xs font-medium text-amber-600">
+          Se va a recortar: una notificación no muestra más de {MAX_MESSAGE} caracteres.
+        </p>
+      )}
+    </Field>
+  );
+}
+
 /** Value that only changes once the input has been still for `ms`. */
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);

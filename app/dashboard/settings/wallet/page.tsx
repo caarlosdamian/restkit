@@ -50,6 +50,7 @@ export default async function WalletSettingsPage() {
             unitPlural: config.sellos.unitPlural,
           },
           cashback: { rate: config.cashback.rate, threshold: config.cashback.threshold },
+          notifications: { ...config.notifications },
           card: {
             ground: config.card.ground,
             stampStyle: config.card.stampStyle,
