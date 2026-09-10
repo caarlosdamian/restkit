@@ -25,6 +25,14 @@ export const DEFAULT_LOYALTY: ILoyaltyConfig = {
     photoPlacement: 'background',
     fields: DEFAULT_CARD_FIELDS,
   },
+  notifications: {
+    // The wording avoids gendered participles on purpose: the unit noun is
+    // owner-configurable ("visita", "sello", "café") and its grammatical
+    // gender is unknowable from here, so nothing may agree with it.
+    stamp: 'Registro actualizado: {progreso}',
+    rewardReady: '¡Ya puedes reclamar tu premio! {progreso}',
+    cashback: 'Tu saldo ahora es {progreso}.',
+  },
 };
 
 /** Tolerates a business document saved before a field existed, and the plain
@@ -48,8 +56,22 @@ export function loyaltyConfig(business?: Partial<IBusiness> | null): ILoyaltyCon
       // the slot editor should not inherit the sellos card's fields.
       fields: l?.card?.fields ?? defaultCardFields(l?.mechanic ?? DEFAULT_LOYALTY.mechanic),
     },
+    // Every message falls back individually: an owner who clears one box gets
+    // the default back, never a blank changeMessage — which on Apple means a
+    // pass that updates in total silence.
+    notifications: {
+      stamp: text(l?.notifications?.stamp) ?? DEFAULT_LOYALTY.notifications.stamp,
+      rewardReady: text(l?.notifications?.rewardReady) ?? DEFAULT_LOYALTY.notifications.rewardReady,
+      cashback: text(l?.notifications?.cashback) ?? DEFAULT_LOYALTY.notifications.cashback,
+    },
     location: l?.location,
   };
+}
+
+/** A stored string that is actually worth using. */
+function text(value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /* ------------------------------------------------------------------ labels */
