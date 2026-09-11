@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sendEmail, emailFrom, emailProvider } from '@/lib/email';
-import { resetPasswordEmail } from '@/lib/email-templates';
+import { resetPasswordEmail, changeEmailVerificationEmail } from '@/lib/email-templates';
 
 /**
  * The email layer is the one part of the reset flow with no user-visible
@@ -162,5 +162,67 @@ describe('the reset email', () => {
     expect(mail.html).toMatch(/^<!DOCTYPE html>/);
     // Gmail strips <style> and <svg>; a blocked <img> is worse than no image.
     expect(mail.html).not.toMatch(/<style|<svg|<img/i);
+  });
+});
+
+describe('the change-of-email confirmation', () => {
+  const url = 'https://www.restaurantkit.app/api/auth/verify-email?token=tok_abc&callbackURL=%2Fdashboard%2Fsettings';
+  const base = { url, currentEmail: 'vieja@negocio.mx', newEmail: 'nueva@negocio.mx', expiresInMinutes: 60 };
+
+  it('carries the link in both parts, escaped where it belongs', () => {
+    const mail = changeEmailVerificationEmail({ ...base, name: 'Carlos Damián' });
+    // Plain text takes the URL as-is...
+    expect(mail.text).toContain(url);
+    // ...and the html takes it entity-escaped. This link carries two query
+    // parameters, so the `&` between them MUST be `&amp;` inside an href —
+    // the reset mail has only one and so never exercised this.
+    expect(mail.html).toContain(url.replace(/&/g, '&amp;'));
+    expect(mail.html).not.toContain('token=tok_abc&callbackURL');
+  });
+
+  it('keeps the token, and the addresses, out of the subject line', () => {
+    // Subjects render on lock screens — and this one is read by whoever picks
+    // the phone up, not necessarily the account owner.
+    const mail = changeEmailVerificationEmail({ ...base, name: null });
+    expect(mail.subject).not.toContain('tok_abc');
+    expect(mail.subject).not.toContain('nueva@negocio.mx');
+    expect(mail.subject).not.toContain('vieja@negocio.mx');
+  });
+
+  it('names both addresses in the body, so the reader can place the account', () => {
+    const mail = changeEmailVerificationEmail({ ...base, name: 'Ana' });
+    for (const part of [mail.text, mail.html]) {
+      expect(part).toContain('vieja@negocio.mx');
+      expect(part).toContain('nueva@negocio.mx');
+    }
+  });
+
+  it('warns that the POS terminal login moves too', () => {
+    // The address is the terminal's username as well as the dashboard's, and a
+    // manager who does not know that finds out mid-shift.
+    const mail = changeEmailVerificationEmail({ ...base, name: 'Ana' });
+    expect(mail.text).toContain('punto de venta');
+    expect(mail.html).toContain('punto de venta');
+  });
+
+  it('tells a reader who did not ask for this what it means', () => {
+    const mail = changeEmailVerificationEmail({ ...base, name: 'Ana' });
+    expect(mail.text).toContain('Si no pediste esto');
+  });
+
+  it('escapes a name, which is typed by the user', () => {
+    const mail = changeEmailVerificationEmail({ ...base, name: '<script>alert(1)</script>' });
+    expect(mail.html).not.toContain('<script>');
+    expect(mail.html).toContain('&lt;script&gt;');
+  });
+
+  it('greets by first name, and copes without one', () => {
+    expect(changeEmailVerificationEmail({ ...base, name: 'Carlos Damián' }).text).toContain('Hola Carlos,');
+    expect(changeEmailVerificationEmail({ ...base, name: null }).text).toContain('Hola,');
+  });
+
+  it('says how long the link lasts, in words a person uses', () => {
+    expect(changeEmailVerificationEmail({ ...base, expiresInMinutes: 60 }).text).toContain('1 hora');
+    expect(changeEmailVerificationEmail({ ...base, expiresInMinutes: 30 }).text).toContain('30 minutos');
   });
 });

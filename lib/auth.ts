@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { MongoClient } from 'mongodb';
 import { sendEmail } from './email';
-import { resetPasswordEmail } from './email-templates';
+import { resetPasswordEmail, changeEmailVerificationEmail } from './email-templates';
 import { MIN_PASSWORD_LENGTH } from './password-policy';
 import { appUrl } from './app-url';
 
@@ -34,6 +34,43 @@ const AUTH_BASE_PATH = '/api/auth';
 /** The page that finishes the reset. Only a fallback: the browser normally
  *  asks for it by `redirectTo`, which is what gets carried through. */
 const RESET_PAGE = '/restablecer';
+
+/** Same hour as a reset token, and for the same reason — except that this one
+ *  matters more: `/verify-email` CREATES a session when the browser opening the
+ *  link has none, so the emailed link is a way into the account, not just a
+ *  confirmation of an address. */
+const EMAIL_VERIFICATION_TTL_SECONDS = 60 * 60;
+
+/** Where a confirmed email change lands. */
+const SETTINGS_PAGE = '/dashboard/settings';
+
+/**
+ * Read the addresses out of a better-auth email-verification token.
+ *
+ * The `sendVerificationEmail` hook is handed the user with the NEW address
+ * already substituted, and never the old one — but the token it comes with is
+ * a JWT carrying both (`email` = current, `updateTo` = requested). Naming the
+ * outgoing address is what lets the reader tell a change they asked for from
+ * one somebody else started on their account, so it is worth digging out.
+ *
+ * Signature deliberately unchecked: we minted this token microseconds ago and
+ * are only reading it to write a sentence. Anything unexpected in the shape
+ * returns nothing rather than throwing — a mail that is slightly vaguer beats
+ * a mail that never arrives.
+ */
+function peekVerificationToken(token: string): { email?: string; updateTo?: string } {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return {};
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'));
+    return {
+      email: typeof json.email === 'string' ? json.email : undefined,
+      updateTo: typeof json.updateTo === 'string' ? json.updateTo : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
 
 export const auth = betterAuth({
   database: mongodbAdapter(db),
@@ -114,7 +151,70 @@ trustedOrigins: async (request) => {
   ...(process.env.AUTH_DISABLE_RATE_LIMIT === '1'
     ? { rateLimit: { enabled: false } }
     : {}),
+  emailVerification: {
+    expiresIn: EMAIL_VERIFICATION_TTL_SECONDS,
+    /**
+     * Reached only by the change-email flow today (nothing here verifies an
+     * address at sign-up). better-auth routes BOTH through this one hook, so
+     * it branches on what the token says rather than assuming.
+     *
+     * ⚠️ Same rebuilt-link rule as `sendResetPassword`: better-auth composes
+     * `url` from the origin it infers from the request, which is wrong on a
+     * preview deployment and missing entirely on a server-side call. Only the
+     * `callbackURL` is carried across.
+     */
+    sendVerificationEmail: async ({ user, url, token }) => {
+      const { email: currentEmail, updateTo } = peekVerificationToken(token);
+
+      if (!updateTo) {
+        // A plain address verification. Nothing in the product asks for one
+        // yet, and inventing the copy for a flow with no caller would just rot.
+        // Loud on purpose: whoever turns on `requireEmailVerification` or
+        // `sendOnSignUp` needs to land here and write the template.
+        console.error(
+          '[auth] sendVerificationEmail reached without an email change to confirm. ' +
+            'Plain address verification has no template yet; no mail was sent.'
+        );
+        return;
+      }
+
+      const callbackURL = new URL(url, 'http://parse.invalid').searchParams.get('callbackURL');
+      const link =
+        `${appUrl()}${AUTH_BASE_PATH}/verify-email` +
+        `?token=${encodeURIComponent(token)}` +
+        `&callbackURL=${encodeURIComponent(callbackURL || SETTINGS_PAGE)}`;
+
+      const message = changeEmailVerificationEmail({
+        url: link,
+        name: user.name,
+        // `user.email` is already the new address here; the old one comes from
+        // the token. If it could not be read, say nothing rather than guess.
+        currentEmail: currentEmail ?? '',
+        newEmail: updateTo,
+        expiresInMinutes: EMAIL_VERIFICATION_TTL_SECONDS / 60,
+      });
+
+      // Sent to the NEW address: proving the owner can read it is the whole
+      // point, and it is the address the account moves to.
+      await sendEmail({ to: updateTo, ...message });
+    },
+  },
   user: {
+    /**
+     * ⚠️ The account's email is its POS login too. A confirmed change moves the
+     * terminal's sign-in as well as the dashboard's, which is why the mail says
+     * so explicitly.
+     *
+     * `updateEmailWithoutVerification` is left OFF. Every user in this app has
+     * `emailVerified: false` (nothing verifies at sign-up), so turning it on
+     * would let anyone holding a session move the account to an address they
+     * control in one request, with no proof they can read either address —
+     * session theft upgraded to account takeover. With it off, better-auth
+     * requires the new address to be confirmed before anything is written.
+     */
+    changeEmail: {
+      enabled: true,
+    },
     additionalFields: {
       role: {
         type: 'string',
