@@ -4,7 +4,10 @@ import Customer, { ICustomer } from '@/models/Customer';
 import Visit, { IVisit } from '@/models/Visit';
 import Business from '@/models/Business';
 import { appleDeviceRepository } from '@/repositories/apple-device.repository';
-import { sendAppleWalletPush } from '@/lib/apple-push';
+import { sendAppleWalletPushes } from '@/lib/apple-push';
+// Aliased: `accrueForOrder` has a local `const after = stampState(...)`, and two
+// different `after`s in one file is a trap for the next reader.
+import { after as runAfterResponse } from 'next/server';
 import { updateGoogleWalletObject } from '@/lib/google-wallet';
 import {
   loyaltyConfig,
@@ -32,20 +35,61 @@ function isDuplicateKey(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000;
 }
 
+/**
+ * Run best-effort work that must not delay the response — but must actually
+ * get to finish.
+ *
+ * ⚠️ A bare un-awaited promise is NOT that. A serverless instance is frozen the
+ * instant its response is sent, so work still in flight is suspended part-done
+ * and only resumes if that same instance is later thawed to serve another
+ * request. Wallet pushes were fired that way: roughly half a second of TLS
+ * handshake, APNs request and Google OAuth, started at the exact moment the
+ * runtime stopped running it. The stamp landed in Mongo immediately and the
+ * customer's phone heard about it minutes later, or never — and on a quiet till
+ * "never" was the common case, because nothing came along to thaw the instance.
+ *
+ * `after()` is the platform's answer: the response goes out now, the work is
+ * kept alive to completion. It throws outside a request scope (tests, scripts,
+ * seeds), which is what the fallback covers — there is no response to race
+ * there, so running it inline is correct.
+ */
+function afterResponse(work: () => Promise<void>): void {
+  try {
+    runAfterResponse(work);
+  } catch {
+    void work().catch((err) => console.error('Wallet sync error:', err));
+  }
+}
+
 /** Wallet updates are best-effort: a push that fails must never fail a payment. */
 function syncWallet(customer: ICustomer, business: unknown, silent = false) {
   const customerId = String(customer._id);
 
-  if (!silent) {
-    appleDeviceRepository
-      .findBySerialNumber(customerId)
-      .then((devices) => Promise.allSettled(devices.map((d) => sendAppleWalletPush(d.pushToken))))
-      .catch((err) => console.error('APNs push error:', err));
-  }
+  afterResponse(async () => {
+    const tasks: Promise<void>[] = [];
 
-  updateGoogleWalletObject(customer, business as never).catch((err) =>
-    console.error('Google Wallet update error:', err)
-  );
+    if (!silent) {
+      tasks.push(
+        (async () => {
+          const devices = await appleDeviceRepository.findBySerialNumber(customerId);
+          const results = await sendAppleWalletPushes(devices.map((d) => d.pushToken));
+          // Logged individually: a token Apple has retired fails forever, and
+          // the only way anyone finds out is a line that names it.
+          for (const r of results) {
+            if (!r.ok) console.error(`APNs push failed for ${r.pushToken}:`, r.error);
+          }
+        })()
+      );
+    }
+
+    tasks.push(updateGoogleWalletObject(customer, business as never));
+
+    // allSettled, not all: Apple being down must not skip Google.
+    const settled = await Promise.allSettled(tasks);
+    for (const s of settled) {
+      if (s.status === 'rejected') console.error('Wallet sync error:', s.reason);
+    }
+  });
 }
 
 interface AccrueArgs {
