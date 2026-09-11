@@ -68,6 +68,10 @@ export default function POSOrderPage({
   // Who is taking this order. null = not yet resolved (show PIN);
   // { name } = a waiter via PIN; { name: manager } = "continue as manager".
   const [waiter, setWaiter] = useState<{ staffName: string } | null | undefined>(undefined);
+  // Set when the server refuses the order on subscription grounds (402), so a
+  // lapsed business gets a reason instead of an order builder that silently
+  // fails to save.
+  const [blocked, setBlocked] = useState<string | null>(null);
 
   async function fetchData(tId: string, employeeSession: EmployeeSession) {
     try {
@@ -100,6 +104,9 @@ export default function POSOrderPage({
       if (orderRes.ok) {
         const orderData = await orderRes.json();
         setOrder(orderData);
+      } else if (orderRes.status === 402) {
+        const data = await orderRes.json().catch(() => ({}));
+        setBlocked(data.error || 'Tu suscripción expiró.');
       }
     } finally {
       setLoading(false);
@@ -117,6 +124,16 @@ export default function POSOrderPage({
 
       const employeeSession = JSON.parse(stored) as EmployeeSession;
       setSession(employeeSession);
+
+      // A table may only be opened during an open shift. The caja screen is
+      // where the subscription 402 is surfaced, so without this check a table
+      // URL typed or bookmarked directly walked straight past the money gate.
+      const sesRes = await fetch('/api/pos-session/current');
+      const sesData = sesRes.ok ? await sesRes.json() : null;
+      if (!sesData?.session) {
+        router.push('/pos/dashboard');
+        return;
+      }
 
       // Require a fresh PIN every time a table is opened, so each order is
       // attributed to whoever is actually taking it. Any previous waiter is
@@ -140,6 +157,23 @@ export default function POSOrderPage({
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
           <p className="text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (blocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-sm text-center">
+          <p className="text-base font-semibold text-gray-900">No se puede abrir la orden</p>
+          <p className="mt-2 text-sm text-gray-500">{blocked}</p>
+          <button
+            onClick={() => router.push('/pos/dashboard')}
+            className="mt-5 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white"
+          >
+            Volver a mesas
+          </button>
         </div>
       </div>
     );

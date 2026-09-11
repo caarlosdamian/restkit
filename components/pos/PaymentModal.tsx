@@ -64,6 +64,9 @@ export default function PaymentModal({
   const [customer, setCustomer]         = useState<AttachedCustomer | null>(null);
   const [useCashback, setUseCashback]   = useState(false);
   const [redeemReward, setRedeemReward] = useState(false);
+  // A refused payment used to return silently, so pressing "Cobrar" did
+  // nothing visible. The subscription 402 lands here too.
+  const [error, setError]               = useState<string | null>(null);
 
   // Cashback comes off the bill; `total` stays gross so the ticket can show
   // the discount, and the drawer only ever expects the difference.
@@ -83,6 +86,7 @@ export default function PaymentModal({
 
   async function handleConfirm() {
     setLoading(true);
+    setError(null);
     try {
       const body: Record<string, unknown> = {
         status: "PAID",
@@ -102,8 +106,11 @@ export default function PaymentModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
-      if (!res.ok) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || 'No se pudo completar el cobro. Intenta de nuevo.');
+        return;
+      }
 
       const receipt: ReceiptData = {
         ticketNumber: data.ticketNumber ?? orderId.slice(-6).toUpperCase(),
@@ -336,6 +343,12 @@ export default function PaymentModal({
                       ${change.toFixed(2)}
                     </span>
                   </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                  <p className="text-sm font-medium text-red-700">{error}</p>
                 </div>
               )}
 

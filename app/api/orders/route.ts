@@ -6,6 +6,7 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext } from '@/lib/pos-auth';
 import { verifyWaiterToken, signWaiterToken } from '@/lib/waiter-token';
+import { requireSubscription } from '@/lib/feature-gate';
 
 export async function GET(req: Request) {
   const ctx = await getBusinessContext();
@@ -32,6 +33,13 @@ export async function POST(req: Request) {
   if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   await dbConnect();
+
+  // Opening an order is selling, so it sits behind the same money gate as the
+  // register and the scanner. Without this the caja's 402 was only a UI funnel:
+  // a terminal signed in before the trial lapsed could keep ringing up sales.
+  const denied = await requireSubscription(ctx.businessId);
+  if (denied) return denied;
+
   const { tableId, items, status } = await req.json();
 
   if (!tableId) return NextResponse.json({ error: 'tableId requerido' }, { status: 400 });

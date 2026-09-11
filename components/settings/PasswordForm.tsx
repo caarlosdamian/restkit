@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { MIN_PASSWORD_LENGTH } from "@/lib/password-policy";
 
 /**
  * Change the signed-in account's password.
@@ -18,10 +19,6 @@ import { authClient } from "@/lib/auth-client";
  * not the place to reset one.
  */
 
-/** better-auth's default. Mirrored here so the field can say so before a
- *  round trip, not after. */
-const MIN_LENGTH = 8;
-
 export default function PasswordForm({ email }: { email: string }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -36,11 +33,11 @@ export default function PasswordForm({ email }: { email: string }) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const tooShort = next.length > 0 && next.length < MIN_LENGTH;
+  const tooShort = next.length > 0 && next.length < MIN_PASSWORD_LENGTH;
   const mismatch = confirm.length > 0 && confirm !== next;
   const unchanged = next.length > 0 && next === current;
   const ready =
-    current.length > 0 && next.length >= MIN_LENGTH && confirm === next && !unchanged && !saving;
+    current.length > 0 && next.length >= MIN_PASSWORD_LENGTH && confirm === next && !unchanged && !saving;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,7 +96,7 @@ export default function PasswordForm({ email }: { email: string }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Nueva contraseña"
-            error={tooShort ? `Mínimo ${MIN_LENGTH} caracteres.` : unchanged ? "Es la misma de siempre." : undefined}
+            error={tooShort ? `Mínimo ${MIN_PASSWORD_LENGTH} caracteres.` : unchanged ? "Es la misma de siempre." : undefined}
           >
             <input
               type={reveal ? "text" : "password"}
@@ -180,7 +177,7 @@ function messageFor(code: string | undefined, fallback: string | undefined): str
     case "INVALID_PASSWORD":
       return "La contraseña actual no es correcta.";
     case "PASSWORD_TOO_SHORT":
-      return `La nueva contraseña debe tener al menos ${MIN_LENGTH} caracteres.`;
+      return `La nueva contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.`;
     case "PASSWORD_TOO_LONG":
       return "La nueva contraseña es demasiado larga.";
     case "CREDENTIAL_ACCOUNT_NOT_FOUND":

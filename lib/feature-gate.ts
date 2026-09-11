@@ -97,3 +97,30 @@ export async function requireCapacity(
     { status: 403 }
   );
 }
+
+
+/* --------------------------------------------------- access (money gate) */
+
+/**
+ * The money gate: an expired business may not sell.
+ *
+ * Distinct from the two gates above, which differentiate WHAT an in-good-
+ * standing business can do. This one answers whether they're in good standing
+ * at all, and mirrors the 402 that `POST /api/pos-session/start` already
+ * returns — same shape and code, so the POS can handle one response everywhere.
+ *
+ * Grandfathering is inherited from `evaluateSubscription`: a business with no
+ * subscription record is never blocked.
+ */
+export async function requireSubscription(
+  businessId: string | mongoose.Types.ObjectId,
+  message = 'Tu suscripción expiró. Reactívala para seguir vendiendo.'
+): Promise<NextResponse | null> {
+  await dbConnect();
+  const business = await Business.findById(businessId).select('subscription');
+  if (!evaluateSubscription(business?.subscription).needsUpgrade) return null;
+  return NextResponse.json(
+    { error: message, code: 'SUBSCRIPTION_REQUIRED' },
+    { status: 402 }
+  );
+}
