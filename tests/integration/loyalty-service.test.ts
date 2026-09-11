@@ -8,7 +8,10 @@ import Visit from '@/models/Visit';
 import { DEFAULT_LOYALTY } from '@/lib/loyalty';
 
 // No network from the wallet sync.
-vi.mock('@/lib/apple-push', () => ({ sendAppleWalletPush: vi.fn(async () => {}) }));
+vi.mock('@/lib/apple-push', () => ({
+  sendAppleWalletPush: vi.fn(async () => {}),
+  sendAppleWalletPushes: vi.fn(async () => []),
+}));
 vi.mock('@/lib/google-wallet', () => ({
   updateGoogleWalletObject: vi.fn(async () => {}),
   generateGoogleWalletUrl: vi.fn(() => 'https://pay.google.test/x'),

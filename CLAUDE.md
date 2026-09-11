@@ -339,6 +339,15 @@ All routes require authentication via `better-auth`.
 - ⚠️ **POS is NOT gated by tier.** It was, and that locked POS-native loyalty — the whole differentiator against loyalia.app — out of Lite, the only tier that competes on price. Every plan gets the register; Lite is bounded by 6 tables / 2 seats instead. Enforced at `POST /api/tables` and `POST /api/staff`, which return **403 `PLAN_LIMIT_REACHED`** with the ceiling and an upgrade route (the forms render that as an amber "Ver planes" prompt, not a red error).
 - **Trial-without-card**: signup starts a 14-day `trialing`; trial expiry is time-based (no Stripe involvement until they pay). Gate: dashboard layout walls expired businesses (except `/dashboard/billing`) via the `x-pathname` header set in `proxy.ts`; `POST /api/pos-session/start` returns **402** when expired (can't open the register). The app is fully usable during the trial with **no Stripe config**; checkout just 500s with a clear "price not configured" until `STRIPE_PRICE_*` are set.
 
+### Auth — password reset (public)
+- `POST /api/auth/request-password-reset` — better-auth. `{ email, redirectTo: '/restablecer' }`. **Always 200**, whether or not the address has an account (see the Email section). Rate-limited by better-auth in production.
+- `GET /api/auth/reset-password/:token?callbackURL=…` — validates the token and redirects to `/restablecer?token=…`, or `?error=INVALID_TOKEN`.
+- `POST /api/auth/reset-password` — `{ newPassword, token }`. Single-use token, 1-hour TTL, `MIN_PASSWORD_LENGTH` enforced, **all sessions revoked on success**.
+
+### Auth — change of email (session required)
+- `POST /api/auth/change-email` — better-auth. `{ newEmail, callbackURL }`. **Always 200**, including for an address that already has an account (no mail is sent in that case — see the Email section). Nothing is written until confirmed.
+- `GET /api/auth/verify-email?token=…&callbackURL=…` — applies the change, marks the address verified, refreshes the session cookie, and redirects to `callbackURL` (`/dashboard/settings?correo=confirmado`), or appends `&error=TOKEN_EXPIRED|INVALID_TOKEN|INVALID_USER|USER_NOT_FOUND`.
+
 ### Settings
 - `GET /api/settings` — Fetch business settings
 - `PATCH /api/settings` — Update business settings (OWNER/ADMIN)
@@ -353,6 +362,46 @@ All routes require authentication via `better-auth`.
 
 ### Google Wallet
 - `GET /api/passes/google/[customerId]` — Generate JWT → redirect to Google Wallet save URL
+
+---
+
+## Email & the forgotten-password flow
+
+`lib/email.ts` is the only way anything leaves this app by mail. One function, two providers, picked by what is configured: **Resend** when `RESEND_API_KEY` is set (free tier: 3,000/month, 100/day — called over plain `fetch`, no SDK), and **the log** otherwise, which prints the whole message including the reset link so `npm run dev` can run the flow with no account, no domain and no key.
+
+⚠️ **`sendEmail` never throws.** Every caller sits inside an auth flow. A raised error would turn a password reset into a 500 — and a 500 that only happens for addresses that *do* have an account is an enumeration oracle. Failures are logged and returned in the result; they are never raised. The corollary is that **a misconfigured provider is invisible from the browser**: `RESEND_API_KEY` missing in production logs an error naming the variable, because nothing on screen can say so.
+
+⚠️ **The From address drops `www.`** — mail is authenticated (SPF/DKIM) against the registrable domain, so `no-reply@www.restaurantkit.app` is a different, unverified sender. Defaults to `no-reply@<appUrl() host>`; `EMAIL_FROM` overrides.
+
+`lib/email-templates.ts` holds the messages as data, apart from the transport, so wording is testable without a key or a network — and so the html and text parts cannot drift into saying different things. House rules: inline styles and table layout (Gmail strips `<style>` and `<svg>`, Outlook ignores `flex`), **no external assets** (a blocked image is worse than a wordmark set in type), **never a token in a subject line** (subjects render on lock screens), and escape everything interpolated (`user.name` is typed by the user).
+
+### The flow
+`/recuperar` (ask) → email → `/api/auth/reset-password/:token` (better-auth checks the token) → `/restablecer?token=…` (choose) → `/login`.
+
+That middle hop is kept deliberately rather than linking straight at our page: better-auth validates **before** anyone types, so an expired link lands on `?error=INVALID_TOKEN` and its own screen instead of failing after a password has been chosen and confirmed.
+
+⚠️ **The link's origin is `appUrl()`, not better-auth's.** better-auth assembles it from the origin *and base path* it infers from the incoming request, and infers **neither** when there is no request — a server-side call produced a bare `/reset-password/<token>`, which is a dead link in an inbox. Where inference does work it would just as happily mint a link on a preview deployment that expires next week. So `lib/auth.ts` rebuilds the link from `appUrl()` + `AUTH_BASE_PATH`, carrying over only the `callbackURL`. `AUTH_BASE_PATH` is hardcoded (`/api/auth`, i.e. where `app/api/auth/[...all]/route.ts` sits), which asserting the *shape* of the URL cannot protect — so `tests/integration/password-reset.test.ts` **feeds the emailed link back through `auth.handler` and checks it redirects to `/restablecer` with a token.**
+
+⚠️ **`/recuperar` renders one success state, always.** better-auth answers identically for an unknown address — it even burns the same time generating a throwaway token so the *duration* doesn't give it away. A screen that rendered "no encontramos esa cuenta" would undo that and hand anyone a free tool for testing which emails are RestKit customers. An error there means the **request** failed (offline, 429), never that the account doesn't exist.
+
+⚠️ **`revokeSessionsOnPasswordReset` is ON, and that signs the POS terminal out.** Real cost — the terminal is signed in as the manager and may be mid-shift. Kept because "I need to reset my password" is exactly the moment the account may already be in someone else's hands, and a reset that leaves the attacker's session alive resets nothing. The email and the confirmation screen both warn before it happens.
+
+### Changing the account's email
+`/dashboard/settings` → `components/settings/EmailForm.tsx` → better-auth's `POST /change-email`. Enabled by `user.changeEmail.enabled` in `lib/auth.ts`; the mail is sent from **`emailVerification.sendVerificationEmail`**, not from a `sendChangeEmailVerification` hook — that name is in better-auth's published docs but **does not exist in the installed 1.6.14**, which routes both flows through the one generic hook. Check `node_modules`, not the docs site, before adding options here.
+
+⚠️ **Nothing is written until the new address is confirmed.** Every user in this app has `emailVerified: false` (nothing verifies at sign-up), so `updateEmailWithoutVerification` is deliberately left OFF: turning it on would let anyone holding a stolen session move the account to an address they control in one request, with no proof they can read either address — session theft upgraded to account takeover. With it off, better-auth mails the **new** address and only swaps the email when that link is opened. `tests/integration/change-email.test.ts` asserts the old address still signs in, and the new one does not, *before* the link is opened.
+
+⚠️ **The confirmation link is a credential, not just a confirmation.** better-auth's `/verify-email` **creates a session** when the browser opening it has none — which is what makes the flow work from a phone, and what makes the mail worth protecting. Hence the 1-hour TTL and the warning in the copy.
+
+⚠️ **An address that already has an account gets silence, not an error.** better-auth answers `{ status: true }` and sends nothing, so the form cannot be used to test which addresses are RestKit customers — the same reasoning that gives `/recuperar` one success screen. The form must therefore render one success state; a "ya está en uso" message would hand the oracle straight back.
+
+⚠️ **The link's origin is `appUrl()`**, rebuilt exactly as `sendResetPassword` does and for the same reason. `sendVerificationEmail` is handed the user with the **new** address already substituted and never the old one, so `peekVerificationToken()` decodes the (unverified — we minted it microseconds ago) JWT to recover both for the copy: naming the outgoing address is what lets a reader tell a change they asked for from one somebody else started on their account.
+
+The email is also the **POS terminal login**, so a confirmed change moves the terminal's sign-in too; the mail and the form both say so. Unlike a password reset this does **not** revoke sessions — the address moved, the credential did not.
+
+`lib/password-policy.ts` holds `MIN_PASSWORD_LENGTH` alone and imports nothing — the better-auth config, the settings form and the public reset page all read it, and `lib/auth.ts` opens a MongoClient at module scope, so a client component importing the constant from there would drag the driver into the browser bundle.
+
+`tests/integration/password-reset.test.ts` runs the whole thing against the **real** better-auth instance (it `vi.doUnmock`s the global session stub from `tests/setup.ts`): link opens, token is single-use, short passwords refused, unknown address sends nothing, live session dies.
 
 ---
 

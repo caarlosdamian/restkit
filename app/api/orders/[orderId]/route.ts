@@ -6,6 +6,7 @@ import dbConnect from '@/lib/db';
 import mongoose from 'mongoose';
 import { getBusinessContext } from '@/lib/pos-auth';
 import { verifyWaiterToken, signWaiterToken } from '@/lib/waiter-token';
+import { requireSubscription } from '@/lib/feature-gate';
 import { inventoryService } from '@/services/inventory.service';
 import { loyaltyService } from '@/services/loyalty.service';
 import Customer from '@/models/Customer';
@@ -43,6 +44,15 @@ export async function PATCH(req: Request, { params }: { params: Params }) {
     businessId: ctx.businessId,
   });
   if (!order) return NextResponse.json({ error: 'Orden no encontrada' }, { status: 404 });
+
+  // The money gate, applied to the selling actions only: adding lines to a bill
+  // and taking payment. Cancelling and the kitchen transitions stay open on
+  // purpose — an order already on a table must always be closable, or a lapsed
+  // business is left with tables it can neither charge nor free.
+  if (body.items !== undefined || body.status === 'PAID') {
+    const denied = await requireSubscription(ctx.businessId);
+    if (denied) return denied;
+  }
 
   // Acting waiter from the PIN token, or the logged-in terminal user.
   const hdrs = await headers();
