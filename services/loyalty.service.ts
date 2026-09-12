@@ -61,26 +61,35 @@ function afterResponse(work: () => Promise<void>): void {
   }
 }
 
-/** Wallet updates are best-effort: a push that fails must never fail a payment. */
-function syncWallet(customer: ICustomer, business: unknown, silent = false) {
+/**
+ * Wallet updates are best-effort: a push that fails must never fail a payment.
+ *
+ * ⚠️ There is deliberately no "skip Apple" mode any more. A reversal used to
+ * pass `silent: true` here, which suppressed the push entirely — so the
+ * notification stayed away, and so did the correction: a storeCard never polls,
+ * so the iPhone kept showing a stamp the customer no longer had until the next
+ * purchase happened to push. Meanwhile Google was patched every time, so the
+ * two platforms disagreed about the same card. Quietness is now decided where
+ * it belongs, in the pass Apple fetches — see `lastChangeWasRemoval` below and
+ * `ApplePassOptions.silent` in lib/apple-pass.ts.
+ */
+function syncWallet(customer: ICustomer, business: unknown) {
   const customerId = String(customer._id);
 
   afterResponse(async () => {
     const tasks: Promise<void>[] = [];
 
-    if (!silent) {
-      tasks.push(
-        (async () => {
-          const devices = await appleDeviceRepository.findBySerialNumber(customerId);
-          const results = await sendAppleWalletPushes(devices.map((d) => d.pushToken));
-          // Logged individually: a token Apple has retired fails forever, and
-          // the only way anyone finds out is a line that names it.
-          for (const r of results) {
-            if (!r.ok) console.error(`APNs push failed for ${r.pushToken}:`, r.error);
-          }
-        })()
-      );
-    }
+    tasks.push(
+      (async () => {
+        const devices = await appleDeviceRepository.findBySerialNumber(customerId);
+        const results = await sendAppleWalletPushes(devices.map((d) => d.pushToken));
+        // Logged individually: a token Apple has retired fails forever, and
+        // the only way anyone finds out is a line that names it.
+        for (const r of results) {
+          if (!r.ok) console.error(`APNs push failed for ${r.pushToken}:`, r.error);
+        }
+      })()
+    );
 
     tasks.push(updateGoogleWalletObject(customer, business as never));
 
@@ -363,16 +372,58 @@ export const loyaltyService = {
     }
     await customer.save();
 
-    // A reversal is almost always an internal correction — a mistyped phone,
-    // a wrong customer. Telling the cardholder raises a question at the
-    // counter that nobody on shift can answer, so the pass updates in silence.
-    if (business) syncWallet(customer, business, true);
+    // Pushes like any other change, so the card becomes correct either way.
+    // Whether the customer is TOLD depends on which way this reversal moved the
+    // counter — see `lastChangeWasDecrease`. Undoing a purchase is an internal
+    // correction and lands in silence; undoing a cashback redemption gives the
+    // customer their balance back, which is worth saying.
+    if (business) syncWallet(customer, business);
 
     return { customer };
   },
 
   /** One page of a customer's history, newest first. Dashboard-only — the
    *  cardholder never sees this. */
+  /**
+   * Should the next pass update reach the customer quietly?
+   *
+   * The card ALWAYS syncs; this only decides whether Apple announces it.
+   * Gaining something is worth a lock screen, losing something is not — a
+   * customer who just spent their balance does not need a push telling them it
+   * went down, and a correction the counter made raises a question nobody on
+   * shift can answer.
+   *
+   * ⚠️ **The test is the SIGN of `delta`, never the entry `type`.** This keyed
+   * off `type === 'REVERSAL'` and got both halves wrong:
+   *  - `REWARD_REDEMPTION` always decreases (`-required`, `-applied`) but is not
+   *    a REVERSAL, so claiming a free coffee pushed "Llevas 0 de 10" to the
+   *    customer's lock screen.
+   *  - `REVERSAL` has no fixed direction — it writes `-entry.delta`, so undoing
+   *    a cashback redemption hands money BACK, and that good news went out in
+   *    silence.
+   * `delta` is the signed field by definition; `type` says what kind of entry
+   * it is, not which way it moved.
+   *
+   * Apple decides whether to notify by diffing the pass it fetches against the
+   * installed one, so this has to be answered when the pass is BUILT, not when
+   * the push is sent — the device may come back seconds or hours later. Reading
+   * the ledger at build time keeps the two in step: if a real purchase lands in
+   * between, the entry on top is positive again and the customer hears about
+   * that one, which is right — there is something to tell.
+   *
+   * Derived rather than stored, so every device that fetches gets the same
+   * answer and a re-fetch cannot flip it.
+   */
+  async lastChangeWasDecrease(customerId: string): Promise<boolean> {
+    await dbConnect();
+    const latest = await Visit.findOne({ customerId: new mongoose.Types.ObjectId(customerId) })
+      .sort({ createdAt: -1 })
+      .select('delta')
+      .lean();
+    const delta = (latest as { delta?: number } | null)?.delta;
+    return typeof delta === 'number' && delta < 0;
+  },
+
   async history(customerId: string, businessId: string, page = 0, perPage = 10) {
     await dbConnect();
     const filter = {
