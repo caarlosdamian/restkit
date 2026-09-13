@@ -18,6 +18,7 @@ export type StampCategory =
   | 'belleza'
   | 'salud'
   | 'servicios'
+  | 'deportes'
   | 'mascotas'
   | 'simbolos';
 
@@ -28,6 +29,7 @@ export const CATEGORY_LABELS: Record<StampCategory, string> = {
   belleza: 'Belleza',
   salud: 'Salud',
   servicios: 'Servicios',
+  deportes: 'Deportes',
   mascotas: 'Mascotas',
   simbolos: 'Símbolos',
 };
@@ -109,7 +111,7 @@ export const STAMP_ICONS: StampIcon[] = [
     d: 'M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0ZM20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0ZM16 17h4M4 13h4' },
 
   // ------------------------------------------------------------------ salud
-  { id: 'dumbbell', label: 'Gimnasio', category: 'salud', keywords: ['gym', 'pesas', 'ejercicio', 'fitness'],
+  { id: 'dumbbell', label: 'Gimnasio', category: 'deportes', keywords: ['gym', 'pesas', 'ejercicio', 'fitness'],
     d: 'm6.5 6.5 11 11M21 21l-1-1M3 3l1 1M18 22l4-4M2 6l4-4M3 10l7-7M14 21l7-7' },
   { id: 'heart-pulse', label: 'Salud', category: 'salud', keywords: ['clínica', 'consultorio', 'médico'],
     d: 'M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7ZM3.22 12H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27' },
@@ -139,6 +141,27 @@ export const STAMP_ICONS: StampIcon[] = [
     d: 'M3 6h3M17 6h.01M5 2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM12 20a6 6 0 1 0 0-12 6 6 0 0 0 0 12ZM12 16a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z' },
   { id: 'home', label: 'Hogar', category: 'servicios', keywords: ['casa', 'inmobiliaria', 'muebles'],
     d: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2ZM9 22V12h6v10' },
+
+  // --------------------------------------------------------------- deportes
+  // ⚠️ `padel` and `football` are drawn FOR RestKit, not lifted from lucide —
+  // the installed version has no ball and no racket of any kind, and pádel is
+  // the fastest-growing court sport in Mexico to be missing. They follow the
+  // same contract as everything else here: one 24×24 path, stroke only (the
+  // renderer sets fill="none"), no shape that collapses at stamp size.
+  { id: 'padel', label: 'Raqueta', category: 'deportes', keywords: ['pádel', 'padel', 'tenis', 'squash', 'cancha', 'raqueta'],
+    d: 'M12.94 6.09a4.2 5.5 -35 1 0 -6.88 4.82a4.2 5.5 -35 1 0 6.88 -4.82M6.4 10.67 12.6 6.33M6.82 4.67 12.18 12.33M12.66 13l4.02 5.73M15.21 19.76l2.94-2.06' },
+  { id: 'football', label: 'Balón', category: 'deportes', keywords: ['fútbol', 'futbol', 'soccer', 'cancha', 'pelota', 'llanero'],
+    d: 'M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20M12 7.2l4.57 3.32-1.75 5.36H9.18l-1.75-5.36zM12 7.2V2M16.57 10.52l4.94-1.61M14.82 15.88l3.06 4.21M9.18 15.88l-3.06 4.21M7.43 10.52 2.49 8.91' },
+  { id: 'trophy', label: 'Torneo', category: 'deportes', keywords: ['trofeo', 'campeón', 'premio', 'copa'],
+    d: 'M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978M18 9h1.5a1 1 0 0 0 0-5H18M4 22h16M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zM6 9H4.5a1 1 0 0 1 0-5H6' },
+  { id: 'medal', label: 'Medalla', category: 'deportes', keywords: ['logro', 'premio', 'ganador'],
+    d: 'M11 12 5.12 2.2M13 12l5.88-9.8M8 7h8M12 12a5 5 0 1 0 0 10 5 5 0 1 0 0-10M12 18v-2h-.5' },
+  { id: 'target', label: 'Puntería', category: 'deportes', keywords: ['diana', 'tiro', 'arquería', 'meta'],
+    d: 'M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20M12 6a6 6 0 1 0 0 12 6 6 0 1 0 0-12M12 10a2 2 0 1 0 0 4 2 2 0 1 0 0-4' },
+  { id: 'bike', label: 'Ciclismo', category: 'deportes', keywords: ['bici', 'bicicleta', 'spinning', 'rodada'],
+    d: 'M18.5 14a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7M5.5 14a3.5 3.5 0 1 0 0 7 3.5 3.5 0 1 0 0-7M15 4a1 1 0 1 0 0 2 1 1 0 1 0 0-2M12 17.5V14l-3-3 4-3 2 3h2' },
+  { id: 'timer', label: 'Cronómetro', category: 'deportes', keywords: ['tiempo', 'hora', 'reserva', 'clase'],
+    d: 'M10 2h4M12 14l3-3M12 6a8 8 0 1 0 0 16 8 8 0 1 0 0-16' },
 
   // --------------------------------------------------------------- mascotas
   { id: 'paw', label: 'Mascotas', category: 'mascotas', keywords: ['huella', 'veterinaria', 'perro', 'gato'],

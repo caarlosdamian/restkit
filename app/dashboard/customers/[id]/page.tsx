@@ -170,8 +170,10 @@ export default async function CustomerDetailPage({
         {/* Direct wallet links */}
         <div className="border-t border-gray-100 pt-5 space-y-3">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">O comparte directamente</p>
-          <GoogleWallet customerId={customerId} />
+       <div className="flex gap-4">
+           <GoogleWallet customerId={customerId} />
           <AppleWallet passUrl={passUrl} />
+       </div>
         </div>
       </div>
     </div>

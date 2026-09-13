@@ -4,7 +4,7 @@ import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
 import { featureAllowed } from '@/lib/subscription';
 import { evaluateSubscription } from '@/lib/subscription';
-import { limitFor, wouldExceed, type FeatureId, type LimitId, type PlanId } from '@/lib/plans';
+import { limitFor, wouldExceed, TOP_PLAN, type FeatureId, type LimitId, type PlanId } from '@/lib/plans';
 
 /**
  * Server-side tier gate for API routes: loads the business's subscription and
@@ -87,9 +87,16 @@ export async function requireCapacity(
 
   const max = limitFor(plan, limit);
   const noun = max === 1 ? LIMIT_NOUN[limit].one : LIMIT_NOUN[limit].many;
+  // The top plan has a ceiling too (see PLAN_LIMITS), and telling the customer
+  // who already bought the most expensive tier to "upgrade" is a dead end — the
+  // only honest next step there is talking to us.
+  const nextStep =
+    plan === TOP_PLAN
+      ? 'Escríbenos para ampliar tu cuenta.'
+      : 'Mejora de plan para agregar más.';
   return NextResponse.json(
     {
-      error: `Tu plan incluye ${max} ${noun}. Mejora de plan para agregar más.`,
+      error: `Tu plan incluye ${max} ${noun}. ${nextStep}`,
       code: 'PLAN_LIMIT_REACHED',
       limit,
       max,

@@ -83,7 +83,7 @@ export default function LoyaltyCard({
 
   return (
     <div
-      className="overflow-hidden rounded-3xl shadow-xl ring-1 ring-black/5"
+      className="flex flex-col overflow-hidden rounded-3xl shadow-xl ring-1 ring-black/5"
       style={{ backgroundColor: ground, color: text }}
     >
       {/* Brand bar — a tint of the ground rather than a new colour, so the card
@@ -100,7 +100,7 @@ export default function LoyaltyCard({
         )}
       </div>
 
-      <div className="px-5 pb-6 pt-4">
+      <div className="flex grow flex-col px-5 pb-6 pt-4">
         {showTitle && (
           <h1 className="mb-3 truncate text-xl font-extrabold tracking-tight">{businessName}</h1>
         )}
@@ -128,6 +128,8 @@ export default function LoyaltyCard({
         ) : (
           figures
         )}
+
+        <div className="grow" aria-hidden="true" />
 
         <div
           className="mt-5 flex items-end justify-between gap-4 border-t pt-4"
