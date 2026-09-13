@@ -9,11 +9,18 @@ import Business from '@/models/Business';
 // real API. `listResult` is swapped per-test; applyStripeEvent tests don't
 // touch Stripe so they're unaffected.
 let listResult: { data: unknown[] } = { data: [] };
+/** What the stubbed `customers.retrieve` hands back. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let customerResult: any = null;
+
 vi.mock('@/lib/stripe', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/stripe')>()),
   stripe: {
     subscriptions: {
       list: vi.fn(async () => listResult),
+    },
+    customers: {
+      retrieve: vi.fn(async () => customerResult),
     },
   },
 }));
@@ -22,6 +29,7 @@ beforeAll(startTestDb);
 afterAll(stopTestDb);
 beforeEach(() => {
   listResult = { data: [] };
+  customerResult = null;
   return clearTestDb();
 });
 
