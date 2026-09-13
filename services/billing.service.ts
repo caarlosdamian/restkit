@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
 import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
-import { stripe } from '@/lib/stripe';
+import { stripe, planForPriceId } from '@/lib/stripe';
 import type { SubscriptionStatus, PlanId, BillingPeriod } from '@/models/Business';
 
 /** Map a Stripe subscription status to our coarser access states. */
@@ -46,8 +46,23 @@ async function applySubscription(sub: Stripe.Subscription): Promise<void> {
   const business = await Business.findById(businessId);
   if (!business) return;
 
-  const plan = sub.metadata?.plan as PlanId | undefined;
-  const period = sub.metadata?.period as BillingPeriod | undefined;
+  /**
+   * Metadata first — it is explicit, and `POST /api/billing/checkout` always
+   * sets it. Failing that, work the tier out from the PRICE, which every
+   * subscription carries whether or not anyone thought about metadata.
+   *
+   * ⚠️ Without this fallback a subscription created in the Stripe dashboard
+   * granted access but left the plan untouched, so a business sold Lite kept
+   * running as whatever signup defaulted to (`pro`) — paying for one tier and
+   * using another, with nothing anywhere reporting it.
+   *
+   * An unrecognised price (a one-off, or a grandfathered deal) resolves to
+   * nothing and the plan is left exactly as it was, which is the right answer
+   * when we genuinely cannot tell.
+   */
+  const fromPrice = planForPriceId(sub.items?.data?.[0]?.price?.id);
+  const plan = (sub.metadata?.plan as PlanId | undefined) ?? fromPrice?.plan;
+  const period = (sub.metadata?.period as BillingPeriod | undefined) ?? fromPrice?.period;
 
   business.subscription = {
     ...business.subscription,

@@ -24,8 +24,10 @@ export function requireStripe(): Stripe {
  *  problem, not a bad request — the message names the variable to fix. */
 export class StripePriceMisconfiguredError extends Error {
   readonly code = 'STRIPE_PRICE_MISCONFIGURED';
-  constructor(readonly envKey: string, detail: string) {
+  readonly envKey: string;
+  constructor(envKey: string, detail: string) {
     super(`${envKey}: ${detail}`);
+    this.envKey = envKey;
   }
 }
 
@@ -66,4 +68,40 @@ export function requirePriceId(plan: PlanId, period: BillingPeriod): string {
     );
   }
   return value;
+}
+
+/**
+ * The reverse of `requirePriceId`: which (plan, period) a Stripe price belongs to.
+ *
+ * ⚠️ This is what lets a subscription created OUTSIDE Checkout land on the
+ * right tier. `billingService` used to read the plan only from the
+ * subscription's metadata, and a subscription made in the Stripe dashboard
+ * carries none — so it granted access while leaving `Business.subscription.plan`
+ * at whatever signup defaulted to. Sell someone Lite that way and they run as
+ * Profesional while paying $249, silently.
+ *
+ * The price id was there the whole time; nothing was reading it. Metadata still
+ * wins when present (it is explicit, and it survives a price being swapped for
+ * a grandfathered one), and an unrecognised price returns null so the caller
+ * leaves the plan alone rather than guessing.
+ *
+ * Reads env on every call rather than caching: these are bound at build time on
+ * Vercel, but a long-lived server that was started before a variable was fixed
+ * should pick it up without a redeploy.
+ */
+export function planForPriceId(
+  priceId: string | null | undefined
+): { plan: PlanId; period: BillingPeriod } | null {
+  const wanted = priceId?.trim();
+  if (!wanted) return null;
+
+  for (const plan of ['lite', 'basic', 'pro'] as const) {
+    for (const period of ['monthly', 'annual'] as const) {
+      const configured = process.env[
+        `STRIPE_PRICE_${plan.toUpperCase()}_${period.toUpperCase()}`
+      ]?.trim();
+      if (configured && configured === wanted) return { plan, period };
+    }
+  }
+  return null;
 }
