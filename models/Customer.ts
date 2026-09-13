@@ -23,6 +23,19 @@ export interface ICustomer extends Document {
     appleAuthToken?: string;
     googlePassId?: string;
   };
+  /**
+   * False once the owner archives them. Archiving is how a customer is
+   * "deleted" from the dashboard: they leave the roster, the till lookup and
+   * the scanner, and their pass stops changing because nothing can accrue
+   * against them any more.
+   *
+   * Not a hard delete, and deliberately so. `Visit` is an append-only ledger
+   * and the only explanation for any counter; removing the person it belongs
+   * to would leave the numbers with nothing behind them and quietly erase a
+   * cashback balance the business still owed. Archiving keeps the history and
+   * stays reversible, exactly like `Table.isActive`.
+   */
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -59,6 +72,7 @@ const CustomerSchema: Schema = new Schema(
       appleAuthToken: { type: String },
       googlePassId: { type: String },
     },
+    isActive: { type: Boolean, default: true, index: true },
   },
   { timestamps: true }
 );
@@ -75,6 +89,12 @@ CustomerSchema.index(
   { businessId: 1, phone: 1 },
   { unique: true, partialFilterExpression: { phone: { $type: 'string' } } }
 );
+
+// ⚠️ Those two uniques deliberately do NOT exclude archived customers. An
+// archived person keeps their phone number reserved, so re-enrolling the same
+// number at /j/[slug] still answers ALREADY_ENROLLED rather than minting a
+// second card for one human. Restoring them from the dashboard is the way
+// back, which is the whole reason archiving is reversible.
 
 const Customer: Model<ICustomer> = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
 

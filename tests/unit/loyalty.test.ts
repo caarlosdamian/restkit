@@ -304,6 +304,29 @@ describe('stamp icon catalogue', () => {
     for (const icon of STAMP_ICONS) expect(icon.d.length).toBeGreaterThan(10);
   });
 
+  it('draws every icon with commands an SVG renderer accepts', () => {
+    // The renderer drops `d` straight into a <path> with fill="none". A stray
+    // character produces no error anywhere — the stamp just fails to draw, on
+    // the customer's card, silently.
+    for (const icon of STAMP_ICONS) {
+      expect(icon.d, `${icon.id} does not start with a moveto`).toMatch(/^[Mm]/);
+      expect(icon.d, `${icon.id} has a character no path command uses`).toMatch(
+        /^[MmLlHhVvCcSsQqTtAaZz0-9eE\s.,+-]+$/
+      );
+    }
+  });
+
+  it('gives every icon a label and a searchable category', () => {
+    const categories = new Set(STAMP_ICONS.map((i) => i.category));
+    for (const icon of STAMP_ICONS) {
+      expect(icon.label.trim().length, `${icon.id} has no label`).toBeGreaterThan(0);
+    }
+    // Deportes was added late and is the one an owner outside food service
+    // reaches for first; losing it would strand gyms, courts and studios.
+    expect(categories).toContain('deportes');
+    expect(STAMP_ICONS.filter((i) => i.category === 'deportes').length).toBeGreaterThanOrEqual(10);
+  });
+
   it('falls back to a neutral icon for an unknown id', () => {
     expect(findStampIcon('does-not-exist').id).toBe('star');
     expect(findStampIcon(undefined).id).toBe('star');

@@ -121,8 +121,14 @@ describe('wallet sync on a manually recorded visit', () => {
     const { businessId, customer } = await seed();
 
     await accrue(businessId, String(customer._id));
-    // The fallback runs it inline; give the microtasks a turn.
-    await new Promise((r) => setTimeout(r, 0));
+    // The fallback runs the work inline rather than deferring it. Wait for it
+    // to actually happen instead of assuming one macrotask is enough — it is
+    // not, because the fallback awaits a device lookup, and a fixed delay here
+    // turned real load into a failing test.
+    await vi.waitFor(() => expect(sendAppleWalletPushes).toHaveBeenCalled(), {
+      timeout: 5_000,
+      interval: 10,
+    });
 
     expect(deferred).toHaveLength(0);
     expect(sendAppleWalletPushes).toHaveBeenCalledWith([PUSH_TOKEN]);

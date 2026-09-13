@@ -19,6 +19,29 @@ import path from 'path';
 
 export const MONGO_URI_FILE = path.join(process.cwd(), 'e2e', '.mongo-uri');
 
+/**
+ * Mark an account's address confirmed, straight in the test database.
+ *
+ * Sign-in requires a verified address (`requireEmailVerification` in
+ * lib/auth.ts), and the confirmation link only exists in an email. The suite is
+ * about the product, not about the inbox, so registration is followed by this
+ * rather than by walking the mail — `tests/integration/signup-verification.test.ts`
+ * covers the real flow end to end.
+ */
+export async function markEmailVerified(email: string): Promise<void> {
+  const client = new MongoClient(readFileSync(MONGO_URI_FILE, 'utf8').trim());
+  await client.connect();
+  try {
+    const res = await client
+      .db()
+      .collection('user')
+      .updateOne({ email: email.toLowerCase() }, { $set: { emailVerified: true } });
+    if (res.matchedCount === 0) throw new Error(`markEmailVerified: no user row for ${email}`);
+  } finally {
+    await client.close();
+  }
+}
+
 const TABLES = [
   { number: 1, name: 'Mesa 1', capacity: 2, section: 'Comedor', x: 100, y: 100 },
   { number: 2, name: 'Mesa 2', capacity: 2, section: 'Comedor', x: 220, y: 100 },

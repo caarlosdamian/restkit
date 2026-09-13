@@ -5,6 +5,7 @@ import PricingSection from "@/components/landing/PricingSection";
 import SiteNav from "@/components/landing/SiteNav";
 import SiteFooter from "@/components/landing/SiteFooter";
 import LoyaltyCardCarousel from "@/components/landing/LoyaltyCardCarousel";
+import CardDemo from "@/components/landing/CardDemo";
 import VerticalSampleCard from "@/components/loyalty/VerticalSampleCard";
 import { VERTICALS } from "@/lib/verticals";
 import {
@@ -61,9 +62,7 @@ function Hero() {
               <Link href="/registro" className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-sm no-underline">
                 Comenzar gratis <ArrowRight size={17} />
               </Link>
-              <a href="#modulos" className="inline-flex items-center gap-2 border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50 text-gray-700 font-semibold px-6 py-3 rounded-xl transition-all no-underline">
-                Ver módulos
-              </a>
+              <CardDemo />
             </div>
             <div className="mt-8 flex flex-wrap gap-5">
               {["Sin contrato anual", "Soporte en español", "Datos fiscales en el ticket"].map((t) => (

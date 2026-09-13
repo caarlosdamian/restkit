@@ -37,6 +37,9 @@ export async function GET(req: Request) {
   const matches = await Customer.find({
     businessId: ctx.businessId,
     phone: { $regex: q, $options: 'i' },
+    // Archived customers are out of the programme, so they must not be
+    // attachable at cobro. `$ne: true` keeps rows that predate the field.
+    isActive: { $ne: false },
   })
     .limit(5)
     .sort({ updatedAt: -1 });

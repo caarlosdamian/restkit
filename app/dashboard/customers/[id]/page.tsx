@@ -9,11 +9,12 @@ import CustomerHistory from '@/components/dashboard/CustomerHistory';
 import { qrDataUrl } from '@/lib/qr';
 import RecordVisitButton from '@/components/dashboard/RecordVisitButton';
 import EditCustomerButton from '@/components/dashboard/EditCustomerButton';
+import ArchiveCustomerButton from '@/components/dashboard/ArchiveCustomerButton';
 import { AppleWallet } from '@/components/appleWallet/AppleWallet';
 import GoogleWallet from '@/components/dashboard/GoogleWallet';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ScanLine, Gift, QrCode, Wallet } from 'lucide-react';
+import { ArrowLeft, ScanLine, Gift, QrCode, Wallet, Archive } from 'lucide-react';
 import { appUrl } from '@/lib/app-url';
 
 export default async function CustomerDetailPage({
@@ -45,6 +46,7 @@ export default async function CustomerDetailPage({
   const singular = unitSingular(business);
   const plural = unitPlural(business);
   const isCashback = config.mechanic === 'cashback';
+  const archived = customer.isActive === false;
 
   const history = await loyaltyService.history(customerId, session.user.businessId, 0, 10);
 
@@ -86,8 +88,44 @@ export default async function CustomerDetailPage({
               </p>
             </div>
           </div>
-          <RecordVisitButton customerId={customerId} unitSingular={singular} unitPlural={plural} />
+          <div className="flex items-center gap-2 shrink-0">
+            {archived ? (
+              <ArchiveCustomerButton
+                customerId={customerId}
+                name={customer.name}
+                archived
+                variant="full"
+              />
+            ) : (
+              <>
+                <RecordVisitButton
+                  customerId={customerId}
+                  unitSingular={singular}
+                  unitPlural={plural}
+                />
+                <ArchiveCustomerButton
+                  customerId={customerId}
+                  name={customer.name}
+                  cashbackBalance={customer.stats.cashbackBalance}
+                  pendingRewards={state.rewardsPending}
+                />
+              </>
+            )}
+          </div>
         </div>
+
+        {archived && (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+            <Archive size={17} className="mt-0.5 shrink-0 text-amber-600" />
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold">Cliente eliminado</p>
+              <p className="mt-0.5 leading-relaxed">
+                No aparece al cobrar ni en el escáner, y su tarjeta ya no se actualiza. Su historial
+                se conserva completo — restáuralo para volver a usarlo.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats row */}
