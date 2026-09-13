@@ -47,7 +47,7 @@ export const analyticsService = {
       topCustomers,
       recentVisits,
     ] = await Promise.all([
-      Customer.countDocuments({ businessId: bId }),
+      Customer.countDocuments({ businessId: bId, isActive: { $ne: false } }),
 
       Visit.countDocuments({
         businessId: bId,
@@ -79,7 +79,7 @@ export const analyticsService = {
         { $sort: { _id: 1 } },
       ]),
 
-      Customer.find({ businessId: bId })
+      Customer.find({ businessId: bId, isActive: { $ne: false } })
         .sort({ 'stats.totalVisits': -1 })
         .limit(5)
         .select('name email phone stats'),
@@ -172,7 +172,7 @@ export const analyticsService = {
           { $group: { _id: { type: '$type', mechanic: '$mechanic' }, n: { $sum: 1 }, sum: { $sum: '$delta' } } },
         ]),
 
-        Customer.countDocuments({ businessId: bId, createdAt: { $gte: weekAgo } }),
+        Customer.countDocuments({ businessId: bId, isActive: { $ne: false }, createdAt: { $gte: weekAgo } }),
 
         // Someone who earned on two separate days in the last 30 came back.
         Visit.aggregate([
@@ -187,12 +187,16 @@ export const analyticsService = {
           { $group: { _id: null, total: { $sum: 1 }, repeat: { $sum: { $cond: ['$repeat', 1, 0] } } } },
         ]),
 
-        Customer.countDocuments({ businessId: bId }),
+        Customer.countDocuments({ businessId: bId, isActive: { $ne: false } }),
 
         // Unredeemed balance is money the business owes. Nothing bounds it
         // while cashback never expires, so at least make it visible.
         Customer.aggregate([
-          { $match: { businessId: bId } },
+          // Archived customers drop out of the liability: their balance is
+          // preserved on the row and comes back if they are restored, but
+          // nothing can spend it while they are out of the lookup, so counting
+          // it as money owed today would overstate the figure.
+          { $match: { businessId: bId, isActive: { $ne: false } } },
           { $group: { _id: null, total: { $sum: '$stats.cashbackBalance' } } },
         ]),
       ]);

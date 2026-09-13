@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "fix:indexes": "node --env-file=.env scripts/fix-indexes.mjs"
+    "fix:indexes": "node --env-file=.env scripts/fix-indexes.mjs",
+    "verify:backfill": "node --env-file=.env scripts/verify-existing-users.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

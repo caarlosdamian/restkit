@@ -9,12 +9,18 @@ import { LogIn, Mail, Lock } from "lucide-react";
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  /** Set when sign-in was refused only because the address is unconfirmed. */
+  const [unverified, setUnverified] = useState("");
+  const [resent, setResent] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError("");
+
+    setUnverified("");
+    setResent(false);
 
     const formData = new FormData(e.currentTarget);
     const email = formData.get("email") as string;
@@ -28,6 +34,13 @@ export default function LoginPage() {
         onRequest: () => setLoading(true),
         onResponse: () => setLoading(false),
         onError: (ctx) => {
+          // An unconfirmed address is refused with 403 EMAIL_NOT_VERIFIED.
+          // Telling someone their password is wrong when it is not is how a
+          // sign-up gets abandoned, so this gets its own message and a way out.
+          if (ctx.error.code === "EMAIL_NOT_VERIFIED" || ctx.error.status === 403) {
+            setUnverified(email);
+            return;
+          }
           setError(ctx.error.message || "Credenciales inválidas");
         },
         onSuccess: () => {
@@ -39,6 +52,12 @@ export default function LoginPage() {
       setError("Ocurrió un error inesperado.");
       setLoading(false);
     }
+  }
+
+  async function resend() {
+    setResent(false);
+    await authClient.sendVerificationEmail({ email: unverified, callbackURL: "/dashboard" });
+    setResent(true);
   }
 
   return (
@@ -101,6 +120,25 @@ export default function LoginPage() {
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2.5">
                 {error}
+              </div>
+            )}
+
+            {/* Amber, not red: nothing is wrong with what they typed. */}
+            {unverified && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <p className="font-semibold">Falta confirmar tu correo</p>
+                <p className="mt-1 leading-relaxed">
+                  Te enviamos un enlace a <strong>{unverified}</strong>. Ábrelo para activar tu
+                  cuenta y entrar.
+                </p>
+                <button
+                  type="button"
+                  onClick={resend}
+                  className="mt-2 font-semibold text-amber-900 underline underline-offset-2"
+                >
+                  Enviar el enlace de nuevo
+                </button>
+                {resent && <p className="mt-1.5 font-medium">Listo, lo enviamos otra vez.</p>}
               </div>
             )}
 

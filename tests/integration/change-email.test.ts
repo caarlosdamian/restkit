@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { markEmailVerified } from '../helpers/verified';
 
 /**
  * Changing the account's sign-in address, end to end, through the real
@@ -38,14 +39,22 @@ afterAll(async () => {
   await server?.stop();
 });
 
-/** Sign up and return the session cookie header `/change-email` needs. */
+/**
+ * Sign up and return the session cookie header `/change-email` needs.
+ *
+ * Sign-up itself hands back no session now that `requireEmailVerification` is
+ * on, so the address is confirmed directly and the session comes from signing
+ * in — this file is about moving an address, not about confirming one.
+ */
 async function signUp(email: string, name = 'Carlos Damián'): Promise<string> {
-  const res = await auth.api.signUpEmail({
-    body: { email, password: PASSWORD, name },
+  await auth.api.signUpEmail({ body: { email, password: PASSWORD, name } });
+  await markEmailVerified(email);
+  const res = await auth.api.signInEmail({
+    body: { email, password: PASSWORD },
     asResponse: true,
   });
   const cookie = res.headers.get('set-cookie');
-  expect(cookie, 'sign-up returned no session cookie').toBeTruthy();
+  expect(cookie, 'sign-in returned no session cookie').toBeTruthy();
   return cookie!;
 }
 

@@ -114,7 +114,7 @@ function logEmail(message: EmailMessage): EmailResult {
   if (process.env.NODE_ENV === 'production') {
     console.error(
       `[email] RESEND_API_KEY is not set — "${message.subject}" was NOT delivered to ${redact(message.to)}. ` +
-        'Password resets are silently failing for every user.'
+        'Nobody can confirm a new account or reset a password; both fail silently for every user.'
     );
     return { ok: false, provider: 'log', error: 'RESEND_API_KEY is not set' };
   }

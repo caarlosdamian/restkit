@@ -102,7 +102,7 @@ export default async function LoyaltyPage({
             href="/dashboard/settings/wallet"
             className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 no-underline transition-colors"
           >
-            <Settings2 size={13} /> Tarjeta
+            <Settings2 size={13} /> Editar Tarjeta
           </Link>
         </div>
       </div>
