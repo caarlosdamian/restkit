@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { MongoClient } from 'mongodb';
 import { sendEmail } from './email';
-import { resetPasswordEmail, changeEmailVerificationEmail } from './email-templates';
+import { resetPasswordEmail, changeEmailVerificationEmail, verifyEmailEmail } from './email-templates';
 import { MIN_PASSWORD_LENGTH } from './password-policy';
 import { appUrl } from './app-url';
 
@@ -43,6 +43,10 @@ const EMAIL_VERIFICATION_TTL_SECONDS = 60 * 60;
 
 /** Where a confirmed email change lands. */
 const SETTINGS_PAGE = '/dashboard/settings';
+
+/** Where a confirmed sign-up lands. `autoSignInAfterVerification` means the
+ *  reader arrives already signed in, so send them at the product, not a form. */
+const VERIFIED_LANDING = '/dashboard?correo=verificado';
 
 /**
  * Read the addresses out of a better-auth email-verification token.
@@ -90,6 +94,31 @@ trustedOrigins: async (request) => {
     enabled: true,
     minPasswordLength: MIN_PASSWORD_LENGTH,
     resetPasswordTokenExpiresIn: RESET_TOKEN_TTL_SECONDS,
+    /**
+     * ⚠️ **Sign-in is refused until the address is confirmed** — 403
+     * `EMAIL_NOT_VERIFIED`, for the dashboard and the POS terminal alike.
+     *
+     * Two consequences that are not obvious from this line, both handled
+     * elsewhere and both load-bearing:
+     *
+     * 1. **Sign-up stops returning a session** (`token: null`), so nothing that
+     *    runs after it can assume one. Registration is a server route now
+     *    (`POST /api/auth/register`) rather than a client calling sign-up and
+     *    then an open endpoint with the id it got back.
+     * 2. ⚠️ **Signing up with an address that already exists returns 200 and a
+     *    SYNTHETIC user** — a plausible user object carrying a freshly
+     *    generated id that is in no collection. better-auth does this on
+     *    purpose so sign-up cannot be used to test which addresses are
+     *    customers (`shouldReturnGenericDuplicateResponse` in its sign-up
+     *    route), and it is the same anti-enumeration rule `/recuperar` follows.
+     *    Anything writing rows against `signUp`'s returned id must therefore
+     *    check the user actually exists first, or a duplicate sign-up quietly
+     *    creates records owned by nobody.
+     *
+     * Every account predating this flag has `emailVerified: false` and would be
+     * locked out, so `npm run verify:backfill` marks existing users verified.
+     */
+    requireEmailVerification: true,
     /**
      * ⚠️ A reset logs every device out, the POS terminal included.
      *
@@ -153,6 +182,16 @@ trustedOrigins: async (request) => {
     : {}),
   emailVerification: {
     expiresIn: EMAIL_VERIFICATION_TTL_SECONDS,
+    /** The mail goes out with the account, not on a later prompt. */
+    sendOnSignUp: true,
+    /**
+     * Opening the link signs them in. Without this a new owner confirms their
+     * address and lands on a login form to type the password they chose ninety
+     * seconds ago — and on a phone, which is where mail gets opened, that is
+     * where sign-ups are abandoned. It is also why the message says not to
+     * forward the link: it is a way into the account, not a receipt.
+     */
+    autoSignInAfterVerification: true,
     /**
      * Reached only by the change-email flow today (nothing here verifies an
      * address at sign-up). better-auth routes BOTH through this one hook, so
@@ -165,27 +204,37 @@ trustedOrigins: async (request) => {
      */
     sendVerificationEmail: async ({ user, url, token }) => {
       const { email: currentEmail, updateTo } = peekVerificationToken(token);
+      const raw = new URL(url, 'http://parse.invalid').searchParams.get('callbackURL');
+      // ⚠️ better-auth defaults this to '/' rather than leaving it unset, and
+      // '/' is truthy — so `raw || FALLBACK` silently never fires and every
+      // confirmed account lands on the marketing home page instead of the
+      // product. Treat a bare slash as "nowhere in particular".
+      const callbackURL = raw && raw !== '/' ? raw : null;
 
+      // No `updateTo` means the token is not moving an address: this is a
+      // sign-up confirming the one it was opened with, or a resend of that.
       if (!updateTo) {
-        // A plain address verification. Nothing in the product asks for one
-        // yet, and inventing the copy for a flow with no caller would just rot.
-        // Loud on purpose: whoever turns on `requireEmailVerification` or
-        // `sendOnSignUp` needs to land here and write the template.
-        console.error(
-          '[auth] sendVerificationEmail reached without an email change to confirm. ' +
-            'Plain address verification has no template yet; no mail was sent.'
-        );
+        const link =
+          `${appUrl()}${AUTH_BASE_PATH}/verify-email` +
+          `?token=${encodeURIComponent(token)}` +
+          `&callbackURL=${encodeURIComponent(callbackURL || VERIFIED_LANDING)}`;
+
+        const message = verifyEmailEmail({
+          url: link,
+          name: user.name,
+          expiresInMinutes: EMAIL_VERIFICATION_TTL_SECONDS / 60,
+        });
+        await sendEmail({ to: user.email, ...message });
         return;
       }
 
-      const callbackURL = new URL(url, 'http://parse.invalid').searchParams.get('callbackURL');
-      const link =
+      const changeLink =
         `${appUrl()}${AUTH_BASE_PATH}/verify-email` +
         `?token=${encodeURIComponent(token)}` +
         `&callbackURL=${encodeURIComponent(callbackURL || SETTINGS_PAGE)}`;
 
       const message = changeEmailVerificationEmail({
-        url: link,
+        url: changeLink,
         name: user.name,
         // `user.email` is already the new address here; the old one comes from
         // the token. If it could not be read, say nothing rather than guess.
@@ -205,12 +254,15 @@ trustedOrigins: async (request) => {
      * terminal's sign-in as well as the dashboard's, which is why the mail says
      * so explicitly.
      *
-     * `updateEmailWithoutVerification` is left OFF. Every user in this app has
-     * `emailVerified: false` (nothing verifies at sign-up), so turning it on
-     * would let anyone holding a session move the account to an address they
-     * control in one request, with no proof they can read either address —
+     * `updateEmailWithoutVerification` is left OFF. Sign-up now confirms an
+     * address, so the old argument for this ("nobody is verified anyway") has
+     * gone — but the conclusion is unchanged and the reason is stronger. The
+     * session holder proved they could read the address the account was OPENED
+     * with; that is no evidence at all that they can read the one they are now
+     * asking to move to. Turning this on would let anyone holding a stolen
+     * session redirect the account to an address they control in one request:
      * session theft upgraded to account takeover. With it off, better-auth
-     * requires the new address to be confirmed before anything is written.
+     * mails the new address and writes nothing until that link is opened.
      */
     changeEmail: {
       enabled: true,

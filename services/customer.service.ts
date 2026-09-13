@@ -5,9 +5,9 @@ import { randomBytes } from "crypto";
 import mongoose from "mongoose";
 
 export const customerService = {
-  async getAllCustomers(businessId: string) {
+  async getAllCustomers(businessId: string, opts: { archived?: boolean } = {}) {
     await dbConnect();
-    return await customerRepository.findByBusinessId(businessId);
+    return await customerRepository.findByBusinessId(businessId, opts);
   },
 
   async createCustomer(businessId: string, data: { name: string; email?: string; phone?: string }) {
@@ -33,5 +33,22 @@ export const customerService = {
   ) {
     await dbConnect();
     return await customerRepository.update(id, businessId, data);
-  }
+  },
+
+  /**
+   * Take a customer out of the programme without destroying what they did in
+   * it. They leave the roster, the till lookup and the scanner; their `Visit`
+   * ledger and their cashback balance are untouched, so the history still
+   * explains every number and restoring them brings the balance back exactly
+   * as it was.
+   */
+  async archiveCustomer(id: string, businessId: string) {
+    await dbConnect();
+    return await customerRepository.setActive(id, businessId, false);
+  },
+
+  async restoreCustomer(id: string, businessId: string) {
+    await dbConnect();
+    return await customerRepository.setActive(id, businessId, true);
+  },
 };

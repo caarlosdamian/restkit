@@ -135,7 +135,10 @@ describe('wallet sync on a manually recorded visit', () => {
     // The fallback runs it inline, but "inline" still includes a database round
     // trip to find the devices — so poll rather than guess at a sleep. A fixed
     // setTimeout(0) happened to pass and was a flake waiting to happen.
-    await vi.waitFor(() => expect(sendAppleWalletPushes).toHaveBeenCalledWith([PUSH_TOKEN]));
+    await vi.waitFor(() => expect(sendAppleWalletPushes).toHaveBeenCalledWith([PUSH_TOKEN]), {
+      timeout: 5_000,
+      interval: 10,
+    });
   });
 
   it('still updates Google when Apple throws, and never rejects', async () => {

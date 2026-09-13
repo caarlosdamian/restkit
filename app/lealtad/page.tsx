@@ -6,7 +6,7 @@ import SiteNav from "@/components/landing/SiteNav";
 import SiteFooter from "@/components/landing/SiteFooter";
 
 export const metadata: Metadata = {
-  title: "Programas de lealtad por giro | RestKit",
+  title: "Programas de lealtad por giro",
   description:
     "Tarjetas de lealtad digitales en Apple Wallet y Google Wallet para restaurantes, cafeterías, barberías, spas, gimnasios y más. Sin apps ni plásticos.",
   alternates: { canonical: "/lealtad" },

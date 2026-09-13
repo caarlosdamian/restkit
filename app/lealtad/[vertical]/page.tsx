@@ -3,8 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight, Check, QrCode, Palette, Wallet, Repeat } from "lucide-react";
 import { VERTICALS, getVertical, type Vertical } from "@/lib/verticals";
-import { DEFAULT_LOYALTY, loyaltyConfig } from "@/lib/loyalty";
-import LoyaltyCard from "@/components/loyalty/LoyaltyCard";
+import VerticalSampleCard from "@/components/loyalty/VerticalSampleCard";
 import PricingSection from "@/components/landing/PricingSection";
 import SiteNav from "@/components/landing/SiteNav";
 import SiteFooter from "@/components/landing/SiteFooter";
@@ -28,7 +27,7 @@ export async function generateMetadata({
 
   const url = `/lealtad/${v.slug}`;
   return {
-    title: `${v.title} | RestKit`,
+    title: v.title,
     description: v.metaDescription,
     // Twelve pages about one product are exactly the shape a crawler mistakes
     // for duplicates, so each one states its own canonical.
@@ -76,39 +75,6 @@ export default async function VerticalPage({
 
 /* ────────────────────────────────────────────────────────────── hero */
 
-function SampleCard({ v }: { v: Vertical }) {
-  // The real card component with this trade's own settings — a rendering of
-  // the actual product beats a stock photo of somebody else's shop.
-  const config = loyaltyConfig({
-    settings: {
-      loyalty: {
-        ...DEFAULT_LOYALTY,
-        mechanic: v.mechanic,
-        sellos: {
-          ...DEFAULT_LOYALTY.sellos,
-          required: v.sample.required,
-          rewardDescription: v.sample.reward,
-          unitSingular: v.unit.one,
-          unitPlural: v.unit.many,
-        },
-        cashback: { rate: v.sample.rate, threshold: 200 },
-        card: { ...DEFAULT_LOYALTY.card, stampIcon: v.icon, ground: "brand" },
-      },
-    },
-  } as never);
-
-  return (
-    <LoyaltyCard
-      businessName={`Tu ${v.yours.replace(/^tu /, "")}`}
-      customerName={v.customer.one === "clienta" ? "Ana Sofía" : "Carlos Mendoza"}
-      config={config}
-      brandColor={v.accent}
-      currentVisits={Math.max(1, Math.floor(v.sample.required * 0.6))}
-      cashbackBalance={340}
-    />
-  );
-}
-
 function Hero({ v }: { v: Vertical }) {
   return (
     <section className="border-b border-gray-100 py-16 lg:py-24">
@@ -143,9 +109,9 @@ function Hero({ v }: { v: Vertical }) {
         </div>
 
         <div className="mx-auto w-full max-w-[340px]">
-          <SampleCard v={v} />
+          <VerticalSampleCard v={v} />
           <p className="mt-3 text-center text-xs text-gray-400">
-            Así se ve en Apple Wallet y Google Wallet
+            Así ve su tarjeta tu cliente
           </p>
         </div>
       </div>

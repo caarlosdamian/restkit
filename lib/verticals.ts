@@ -1,4 +1,4 @@
-import type { LoyaltyMechanic } from '@/models/Business';
+import type { CardGround, LoyaltyMechanic, PhotoPlacement } from '@/models/Business';
 
 /**
  * The vertical landing pages.
@@ -37,6 +37,27 @@ export interface Vertical {
   accent: string;
   /** Sample card shown on the page. */
   sample: { required: number; reward: string; rate: number };
+  /**
+   * How this trade's sample card LOOKS. An owner picks all three of these in
+   * `/dashboard/settings/wallet`, and the home-page carousel exists to show
+   * that the card is configurable — so the catalogue deliberately spreads the
+   * combinations rather than repeating one. Four entries per `ground` and four
+   * per `placement`, so no two adjacent cards look like the same template.
+   *
+   * `photo` is hotlinked from the Unsplash CDN, which is what that host is for;
+   * every URL is a free (non-Unsplash+) photo, checked to resolve.
+   *
+   * ⚠️ `footer` renders on the web card and on Google, but NOT on Apple — a
+   * storeCard has one image slot and no way to put a band beneath the fields
+   * (see CLAUDE.md). The wallet form warns an owner about exactly this. So copy
+   * near these cards may say the card lives in both wallets, which is true, but
+   * must never claim that each of these layouts is what an iPhone renders.
+   */
+  card: {
+    photo: string;
+    placement: PhotoPlacement;
+    ground: CardGround;
+  };
   /** <meta description>. Under ~155 chars. */
   metaDescription: string;
 }
@@ -76,6 +97,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'utensils',
     accent: '#b3202c',
     sample: { required: 10, reward: 'Una entrada de cortesía', rate: 8 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=640&q=70',
+      placement: 'footer',
+      ground: 'dark',
+    },
     metaDescription:
       'Programa de lealtad con cashback para restaurantes: devuelve un % de cada cuenta como saldo en Apple Wallet y Google Wallet. Sin apps ni plásticos.',
   },
@@ -113,6 +139,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'coffee',
     accent: '#6f4e37',
     sample: { required: 10, reward: 'Un café gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1567880905822-56f8e06fe630?auto=format&fit=crop&w=640&q=70',
+      placement: 'side',
+      ground: 'light',
+    },
     metaDescription:
       'Tarjeta de sellos digital para cafeterías, en Apple Wallet y Google Wallet. Se llena sola al pagar y no se pierde. Prueba gratis.',
   },
@@ -150,6 +181,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'scissors',
     accent: '#1e3a5f',
     sample: { required: 10, reward: 'Un corte gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=640&q=70',
+      placement: 'background',
+      ground: 'dark',
+    },
     metaDescription:
       'Programa de lealtad para barberías: tarjeta de sellos digital en Apple Wallet y Google Wallet, con reporte por barbero. Prueba gratis.',
   },
@@ -187,6 +223,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'sparkles',
     accent: '#a8194e',
     sample: { required: 8, reward: 'Un tratamiento de cortesía', rate: 10 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1600948836101-f9ffda59d250?auto=format&fit=crop&w=640&q=70',
+      placement: 'side',
+      ground: 'brand',
+    },
     metaDescription:
       'Programa de lealtad con cashback para salones de belleza: devuelve un % de cada servicio como saldo, en Apple Wallet y Google Wallet.',
   },
@@ -224,6 +265,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'leaf',
     accent: '#2f6f5e',
     sample: { required: 6, reward: 'Una sesión de cortesía', rate: 10 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1620733723572-11c53f73a416?auto=format&fit=crop&w=640&q=70',
+      placement: 'footer',
+      ground: 'light',
+    },
     metaDescription:
       'Programa de lealtad para spas con cashback y avisos por ubicación. Tarjeta digital en Apple Wallet y Google Wallet, sin apps.',
   },
@@ -261,8 +307,59 @@ export const VERTICALS: Vertical[] = [
     icon: 'dumbbell',
     accent: '#1f2937',
     sample: { required: 12, reward: 'Descuento en tu mensualidad', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1593079831268-3381b0db4a77?auto=format&fit=crop&w=640&q=70',
+      placement: 'side',
+      ground: 'dark',
+    },
     metaDescription:
       'Programa de lealtad para gimnasios: premia la asistencia con una tarjeta digital en Apple Wallet y Google Wallet y detecta bajas antes de que pasen.',
+  },
+  {
+    slug: 'canchas-de-padel',
+    plural: 'canchas de pádel y fútbol',
+    yours: 'tu cancha',
+    customer: { one: 'jugador', many: 'jugadores' },
+    mechanic: 'sellos',
+    unit: { one: 'reserva', many: 'reservas' },
+    title: 'Lealtad por reserva para canchas de pádel y fútbol',
+    tagline: 'La hora que no vendiste hoy no se vende mañana.',
+    problem: [
+      'Una cancha no vende producto, vende horas, y una hora vacía no se guarda para después: se pierde completa. Por eso el negocio nunca está en el martes a las nueve de la noche, que se llena solo y con lista de espera. Está en el martes a las once de la mañana, en el miércoles a las cuatro de la tarde, en todos esos bloques que aparecen en verde en tu calendario cada semana y que ningún descuento de último minuto alcanza a llenar.',
+      'El otro detalle que casi nadie aprovecha es quién reserva. Juegan cuatro, pero aparta uno solo: el que arma el grupo, el que manda el mensaje, el que persigue a los demás para que confirmen. Ese organizador es tu cliente real y es el único con el que tienes trato. Premiarlo a él por cada reserva es premiar exactamente a la persona que llena tu cancha, y es la razón por la que el grupo termina volviendo a tu horario en lugar de buscar otro club.',
+      'Y hace falta, porque el pádel creció rapidísimo en México y cada pocos meses abre una cancha nueva a quince minutos de la tuya. Lo que decide dónde juegan no es la superficie ni el vidrio: es a dónde está acostumbrado a escribir el grupo cuando alguien dice que quiere jugar el jueves. Un sello por reserva convierte esa costumbre en algo que el jugador puede ver y contar.',
+    ],
+    pullQuote: 'Juegan cuatro, pero aparta uno. A ese es al que tienes que premiar.',
+    rewardIdeas: [
+      'La décima reserva, gratis',
+      'Una hora de cancha techada al completar la tarjeta',
+      'Préstamo de palas sin costo para el grupo que llenó su tarjeta',
+      'Bebida fría para los cuatro jugadores al llegar al premio',
+    ],
+    faq: [
+      {
+        q: '¿El sello es por reserva o por jugador?',
+        a: 'Por reserva, y se lo lleva quien apartó la cancha. Es el que hizo el trabajo de juntar al grupo y el único que tiene tarjeta contigo. Si quieres premiar a los cuatro, cada uno puede registrar su propia tarjeta y escanear su código al llegar.',
+      },
+      {
+        q: '¿Y si el grupo cancela o no se presenta?',
+        a: 'El sello se registra cuando cobras, no cuando apartan. Una reserva que se cae nunca llega a sellarse, y si alcanzaste a cobrarla y luego la reembolsas, se quita el sello con un movimiento que queda anotado en el historial del jugador.',
+      },
+      {
+        q: '¿Sirve si aparto por WhatsApp y no tengo sistema de reservas?',
+        a: 'Sí. No necesitas mover tu forma de apartar: el jugador enseña el código de su tarjeta al llegar, lo escaneas desde cualquier celular y queda registrada la visita. Si además cobras con el punto de venta de RestKit, el sello se pone solo.',
+      },
+    ],
+    icon: 'padel',
+    accent: '#1d4ed8',
+    sample: { required: 10, reward: 'Una hora de cancha gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1658723826297-fe4d1b1e6600?auto=format&fit=crop&w=640&q=70',
+      placement: 'side',
+      ground: 'brand',
+    },
+    metaDescription:
+      'Programa de lealtad para canchas de pádel y fútbol: un sello por reserva, tarjeta en Apple y Google Wallet y los horarios muertos por fin se llenan.',
   },
   {
     slug: 'nutriologos',
@@ -298,6 +395,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'salad',
     accent: '#3f7d3f',
     sample: { required: 6, reward: 'Consulta de seguimiento gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=640&q=70',
+      placement: 'background',
+      ground: 'light',
+    },
     metaDescription:
       'Programa de lealtad para nutriólogos: tarjeta digital de seguimiento que ayuda a que el paciente complete su proceso. Apple y Google Wallet.',
   },
@@ -335,6 +437,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'car',
     accent: '#0e5a8a',
     sample: { required: 8, reward: 'Una lavada gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1633014041037-f5446fb4ce99?auto=format&fit=crop&w=640&q=70',
+      placement: 'footer',
+      ground: 'brand',
+    },
     metaDescription:
       'Programa de lealtad para autolavados: tarjeta de sellos digital en Apple Wallet y Google Wallet. La lavada gratis siempre a la vista.',
   },
@@ -372,6 +479,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'paw',
     accent: '#7a4b1f',
     sample: { required: 8, reward: 'Un baño de cortesía', rate: 7 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1654895716780-b4664497420d?auto=format&fit=crop&w=640&q=70',
+      placement: 'background',
+      ground: 'brand',
+    },
     metaDescription:
       'Programa de lealtad con cashback para veterinarias: recupera la compra de alimento con saldo que sólo se gasta contigo. Apple y Google Wallet.',
   },
@@ -409,6 +521,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'croissant',
     accent: '#8a5a1e',
     sample: { required: 10, reward: 'Una pieza de cortesía', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1568254183919-78a4f43a2877?auto=format&fit=crop&w=640&q=70',
+      placement: 'footer',
+      ground: 'light',
+    },
     metaDescription:
       'Tarjeta de sellos digital para panaderías, en Apple Wallet y Google Wallet. Se llena al cobrar y nunca se pierde. Prueba gratis.',
   },
@@ -446,6 +563,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'ice-cream',
     accent: '#b8306a',
     sample: { required: 10, reward: 'Una nieve gratis', rate: 5 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1567206563064-6f60f40a2b57?auto=format&fit=crop&w=640&q=70',
+      placement: 'side',
+      ground: 'brand',
+    },
     metaDescription:
       'Programa de lealtad para heladerías: tarjeta de sellos digital que sobrevive la temporada baja. Apple Wallet y Google Wallet, sin apps.',
   },
@@ -483,6 +605,11 @@ export const VERTICALS: Vertical[] = [
     icon: 'gem',
     accent: '#7c3aed',
     sample: { required: 8, reward: 'Un servicio gratis', rate: 8 },
+    card: {
+      photo: 'https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=640&q=70',
+      placement: 'background',
+      ground: 'dark',
+    },
     metaDescription:
       'Programa de lealtad para nail spa: tarjeta de sellos o cashback en Apple Wallet y Google Wallet, con tu color, tu logo y tu foto.',
   },

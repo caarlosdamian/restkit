@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { requireStripe, requirePriceId, StripePriceMisconfiguredError } from '@/lib/stripe';
 import { toPlanId, toBillingPeriod } from '@/lib/plans';
 import { appUrl } from '@/lib/app-url';
+import { subscriptionMetadata } from '@/lib/billing-metadata';
 
 /**
  * Starts a Stripe Checkout session (mode: subscription) for the caller's
@@ -97,8 +98,8 @@ async function checkout(req: Request) {
       line_items: [{ price: priceId, quantity: 1 }],
       // businessId travels on the subscription so the webhook can find the tenant
       // even if it fires before we read the checkout.session object.
-      subscription_data: { metadata: { businessId: business._id.toString(), plan, period } },
-      metadata: { businessId: business._id.toString(), plan, period },
+      subscription_data: { metadata: subscriptionMetadata(business._id.toString(), plan, period) },
+      metadata: subscriptionMetadata(business._id.toString(), plan, period),
       success_url: `${base}/dashboard/billing?checkout=success`,
       cancel_url: `${base}/dashboard/billing?checkout=cancel`,
       allow_promotion_codes: true,

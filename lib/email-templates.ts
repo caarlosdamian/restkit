@@ -183,6 +183,82 @@ export function resetPasswordEmail(params: {
  * tells a reader whether the message is about an account they recognise, and
  * without it a change request they did not make looks like ordinary spam.
  */
+/**
+ * Confirm the address a new account was opened with.
+ *
+ * ⚠️ This link is the ONLY way into a brand-new account: sign-in is refused
+ * until the address is confirmed (`requireEmailVerification` in lib/auth.ts),
+ * and opening it signs the reader straight in. So it is a credential, which is
+ * why the TTL is an hour and why the copy says not to forward it — the same
+ * reasoning as the change-of-email message.
+ *
+ * No address in the subject, same as every other message here: subjects render
+ * on lock screens.
+ */
+export function verifyEmailEmail(params: {
+  url: string;
+  name?: string | null;
+  /** Named so the reader recognises the sign-up they just completed. */
+  businessName?: string | null;
+  expiresInMinutes: number;
+}): Omit<EmailMessage, 'to'> {
+  const { url, expiresInMinutes } = params;
+  const greeting = greetingFor(params.name);
+  const expiry = expiryPhrase(expiresInMinutes);
+  const business = (params.businessName ?? '').trim();
+  // "tu cuenta de RestKit para Tacos El Norte" when we know the business,
+  // "tu cuenta de RestKit" when we do not. Never "para  ".
+  const account = business ? `tu cuenta de RestKit para ${business}` : 'tu cuenta de RestKit';
+
+  const subject = 'Confirma tu correo para activar RestKit';
+
+  const text = [
+    greeting,
+    '',
+    `Creaste ${business ? `${account}` : account}. Falta un paso: confirmar que este`,
+    'correo es tuyo. Abre este enlace:',
+    '',
+    url,
+    '',
+    `El enlace vence en ${expiry} y sólo sirve una vez.`,
+    '',
+    'Hasta que lo abras no vas a poder iniciar sesión, ni en el panel ni en la',
+    'terminal del punto de venta. Al abrirlo entras directo, sin volver a',
+    'escribir tu contraseña — por eso no reenvíes este correo a nadie.',
+    '',
+    'Si no creaste ninguna cuenta, ignora este mensaje: sin abrir el enlace, la',
+    'cuenta no se activa.',
+    '',
+    '— RestKit',
+  ].join('\n');
+
+  const html = shell(
+    [
+      lead([
+        greeting,
+        `Creaste <strong style="color:${INK};">${esc(account)}</strong>. Falta un paso: confirmar que este correo es tuyo.`,
+      ]),
+      button(url, 'Confirmar mi correo'),
+      footnotes([
+        {
+          html: `El enlace vence en ${esc(expiry)} y sólo sirve una vez.`,
+        },
+        {
+          html:
+            'Hasta que lo abras no vas a poder iniciar sesión, ni en el panel ni en la terminal del punto de venta. ' +
+            'Al abrirlo entras directo, sin volver a escribir tu contraseña — por eso <strong>no reenvíes este correo</strong>.',
+        },
+        {
+          html: 'Si no creaste ninguna cuenta, ignora este mensaje: sin abrir el enlace, la cuenta no se activa.',
+        },
+        { html: esc(url), wrap: true },
+      ])
+    ].join('\n')
+  );
+
+  return { subject, text, html };
+}
+
 export function changeEmailVerificationEmail(params: {
   url: string;
   name?: string | null;

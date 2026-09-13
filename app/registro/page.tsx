@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { authClient } from '@/lib/auth-client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Store, Mail, Lock, User, UserPlus } from 'lucide-react';
 import { getPlan, TRIAL_DAYS } from '@/lib/plans';
@@ -10,6 +10,9 @@ import { getPlan, TRIAL_DAYS } from '@/lib/plans';
 function RegistroForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  /** The address we told to go check its mail. Also the "done" flag. */
+  const [sentTo, setSentTo] = useState('');
+  const [resent, setResent] = useState(false);
   // useSearchParams (not window.location): it's reactive and correct during
   // client-side navigations, where reading window.location at render time can
   // race the URL update and silently drop the ?plan= the visitor clicked on
@@ -17,71 +20,99 @@ function RegistroForm() {
   const sp = useSearchParams();
   const plan = sp.get('plan');
   const period = sp.get('period');
-  const router = useRouter();
 
   const selectedPlan = getPlan(plan);
 
+  /**
+   * One server call does the whole sign-up. It used to be two from here —
+   * `authClient.signUp.email`, then `POST /api/business` with the id that came
+   * back — which cannot work now that sign-up returns no session.
+   */
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     const formData = new FormData(e.currentTarget);
-    const name = formData.get('name') as string;
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
-    const businessName = formData.get('businessName') as string;
+    const email = String(formData.get('email') || '');
 
     try {
-      const { data, error: authError } = await authClient.signUp.email(
-        {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.get('name'),
           email,
-          password,
-          name,
-          callbackURL: '/dashboard',
-        },
-        {
-          onRequest: () => setLoading(true),
-          onResponse: () => setLoading(false),
-          onError: (ctx) => setError(ctx.error.message),
-        },
-      );
+          password: formData.get('password'),
+          businessName: formData.get('businessName'),
+          plan,
+          period,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
 
-      if (authError) {
-        setError(authError.message || 'Error en la autenticación');
+      if (!res.ok) {
+        setError(data.error || 'No se pudo crear la cuenta.');
         return;
       }
 
-      if (data?.user) {
-        const res = await fetch('/api/business', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            businessName,
-            ownerId: data.user.id,
-            ownerName: data.user.name,
-            ownerEmail: data.user.email,
-            plan,
-            billingPeriod: period,
-          }),
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json();
-          console.error('Business creation error:', errorData);
-          setError(
-            `Usuario creado pero error al crear el negocio: ${errorData.error || 'Error desconocido'}`,
-          );
-          return;
-        }
-      }
-
-      router.push('/dashboard');
-    } catch (err) {
+      setSentTo(email);
+    } catch {
       setError('Ocurrió un error inesperado.');
     } finally {
       setLoading(false);
     }
+  }
+
+  async function resend() {
+    setResent(false);
+    await authClient.sendVerificationEmail({ email: sentTo, callbackURL: '/dashboard' });
+    setResent(true);
+  }
+
+  if (sentTo) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
+        <div className="w-full max-w-md text-center">
+          <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+            <Mail size={22} />
+          </div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+            Revisa tu correo
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
+            Enviamos un enlace a <strong className="text-gray-900">{sentTo}</strong>. Ábrelo para
+            confirmar tu correo y entrar — el enlace vence en una hora.
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-gray-500">
+            Hasta que lo abras no vas a poder iniciar sesión, ni en el panel ni en la terminal.
+          </p>
+          <div className="mt-7 rounded-2xl border border-gray-200 bg-white p-5 text-left">
+            <p className="text-sm text-gray-500">
+              ¿No llegó? Revisa la carpeta de spam, o
+              <button
+                onClick={resend}
+                className="ml-1 font-semibold text-emerald-600 hover:text-emerald-700"
+              >
+                envíalo de nuevo
+              </button>
+              .
+            </p>
+            {resent && (
+              <p className="mt-2 text-sm font-medium text-emerald-600">
+                Listo, lo enviamos otra vez.
+              </p>
+            )}
+          </div>
+          <Link
+            href="/login"
+            className="mt-7 inline-block text-sm font-semibold text-gray-500 no-underline hover:text-gray-900"
+          >
+            Ir a iniciar sesión
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

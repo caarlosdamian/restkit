@@ -39,6 +39,7 @@ export const PLANS: Plan[] = [
     features: [
       'POS completo — hasta 6 mesas',
       'Fidelización automática al cobrar',
+      'Tarjetas en Apple y Google Wallet',
       'Clientes ilimitados',
       '2 usuarios',
       'Soporte por email',
@@ -54,9 +55,8 @@ export const PLANS: Plan[] = [
     desc: 'Para restaurantes en operación, sin techo de mesas.',
     features: [
       'Todo lo del plan Lite',
-      'Mesas ilimitadas',
-      '10 usuarios',
-      'Facturación CFDI',
+      'Mesas ilimitadas, organizadas por secciones',
+      '10 usuarios con PIN propio',
       'Soporte por email',
     ],
     highlight: false,
@@ -70,12 +70,11 @@ export const PLANS: Plan[] = [
     desc: 'Para restaurantes que necesitan control total.',
     features: [
       'Todo lo del plan Básico',
-      'Usuarios ilimitados',
-      'KDS cocina + barra',
-      'Inventario y recetas',
-      '25+ reportes',
+      '50 usuarios',
+      'Pantalla de cocina (KDS)',
+      'Inventario con recetas y descuento automático',
+      'Reporte de ventas por mesero',
       'Soporte prioritario',
-      'Delivery integrado',
     ],
     highlight: true,
     cta: 'Comenzar gratis',
@@ -119,11 +118,31 @@ export interface PlanLimits {
   staff: number | null;
 }
 
+/**
+ * ⚠️ **Profesional has a seat ceiling on purpose — it is NOT "unlimited".**
+ *
+ * A seat is a user row, a POS PIN and a person who can open the register, so
+ * an unbounded count is an unbounded cost with a flat price against it: one
+ * account can hand out logins to a whole chain and still pay for a single
+ * restaurant. Withdrawing "ilimitado" after somebody has bought it is a repricing
+ * conversation with an existing customer; starting with a number is just a number.
+ *
+ * 50 is chosen to never bite a legitimate single-location restaurant — a large
+ * one runs 20–30 staff across all shifts — so in practice it reads as no limit
+ * while still being a figure that can be quoted, enforced, and raised later for
+ * a multi-sucursal tier that does not exist yet.
+ *
+ * Tables stay uncapped above Lite: a table costs nothing and the number is a
+ * property of the room, not of how much product is being consumed.
+ */
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
   lite:  { tables: 6, staff: 2 },
   basic: { tables: null, staff: 10 },
-  pro:   { tables: null, staff: null },
+  pro:   { tables: null, staff: 50 },
 };
+
+/** The most capacious plan — the one with no plan to upgrade TO. */
+export const TOP_PLAN: PlanId = 'pro';
 
 export type LimitId = keyof PlanLimits;
 

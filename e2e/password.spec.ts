@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { registerAndSignIn } from './helpers';
 
 /**
  * Changing the account password from /dashboard/settings.
@@ -19,13 +20,12 @@ const ACCOUNT = {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test('an owner can change their password, and only the new one works', async ({ page }) => {
-  await page.goto('/registro');
-  await page.locator('#businessName').fill(ACCOUNT.businessName);
-  await page.locator('#name').fill(ACCOUNT.name);
-  await page.locator('#email').fill(ACCOUNT.email);
-  await page.locator('#password').fill(ACCOUNT.before);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL('**/dashboard', { timeout: 60_000 });
+  await registerAndSignIn(page, {
+    businessName: ACCOUNT.businessName,
+    name: ACCOUNT.name,
+    email: ACCOUNT.email,
+    password: ACCOUNT.before,
+  });
 
   await page.goto('/dashboard/settings');
   const form = page.locator('form', { has: page.getByRole('button', { name: 'Cambiar contraseña' }) });

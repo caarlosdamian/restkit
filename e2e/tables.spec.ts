@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { FRESH_OWNER } from './helpers';
+import { FRESH_OWNER, registerAndSignIn } from './helpers';
 
 /**
  * Exercises the fresh-database path: a brand-new business, registered through
@@ -13,13 +13,7 @@ test.describe('Fresh business: table management', () => {
   test('register with no seed data → add a table from the dashboard → it appears in the POS', async ({
     page,
   }) => {
-    await page.goto('/registro');
-    await page.locator('#businessName').fill(FRESH_OWNER.businessName);
-    await page.locator('#name').fill(FRESH_OWNER.name);
-    await page.locator('#email').fill(FRESH_OWNER.email);
-    await page.locator('#password').fill(FRESH_OWNER.password);
-    await page.locator('button[type="submit"]').click();
-    await page.waitForURL('**/dashboard');
+    await registerAndSignIn(page, FRESH_OWNER);
 
     // Nothing has been seeded — the dashboard tables page starts empty.
     await page.goto('/dashboard/tables');

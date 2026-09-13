@@ -36,7 +36,9 @@ export async function GET(req: Request) {
   const [business, report, customers, lastAccruals] = await Promise.all([
     businessRepository.findById(session.user.businessId),
     analyticsService.getLoyaltyReport(session.user.businessId, period),
-    Customer.find({ businessId: bId }).sort({ 'stats.totalVisits': -1 }).lean(),
+    Customer.find({ businessId: bId, isActive: { $ne: false } })
+      .sort({ 'stats.totalVisits': -1 })
+      .lean(),
     Visit.aggregate([
       { $match: { businessId: bId, type: 'ACCRUAL' } },
       { $group: { _id: '$customerId', last: { $max: '$createdAt' } } },

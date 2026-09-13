@@ -3,9 +3,13 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { putAsset, StorageNotConfiguredError } from '@/lib/storage';
 import { normalizeUpload } from '@/lib/image-normalize';
+import {
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MB,
+  UPLOAD_TYPES,
+  formatNames,
+} from '@/lib/upload-limits';
 
-const MAX_BYTES = 4 * 1024 * 1024;
-const ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
 
 /**
  * Brand asset upload. Before this, `branding.logo` was a text box asking the
@@ -29,12 +33,18 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 });
   }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: 'La imagen no debe pasar de 4 MB' }, { status: 400 });
-  }
-  if (!ALLOWED.includes(file.type)) {
+  if (file.size > MAX_UPLOAD_BYTES) {
     return NextResponse.json(
-      { error: 'Formato no soportado. Usa PNG, JPG, WEBP o SVG.' },
+      { error: `La imagen no debe pasar de ${MAX_UPLOAD_MB} MB` },
+      { status: 400 }
+    );
+  }
+  if (!(UPLOAD_TYPES as readonly string[]).includes(file.type)) {
+    // Names the format that was actually sent: "no soportado" alone leaves an
+    // owner guessing, and the usual culprit is a HEIC straight off an iPhone.
+    const got = file.type ? file.type.replace(/^image\//, '').toUpperCase() : 'ese archivo';
+    return NextResponse.json(
+      { error: `No podemos usar ${got}. Usa ${formatNames(UPLOAD_TYPES)}.` },
       { status: 400 }
     );
   }

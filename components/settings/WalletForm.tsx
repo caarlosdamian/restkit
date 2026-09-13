@@ -2,7 +2,15 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Check, Search, Upload, MapPin, Loader2, Stamp, Wallet, Bell } from "lucide-react";
+import { Save, Check, Search, Upload, MapPin, Loader2, Stamp, Wallet, Bell, ExternalLink, Trash2 } from "lucide-react";
+import { parsePin, mapsUrl, formatPin, type PinFailure } from "@/lib/geo-pin";
+import {
+  acceptAttr,
+  uploadHint,
+  ICON_TYPES,
+  PHOTO_TYPES,
+  LOGO_TYPES,
+} from "@/lib/upload-limits";
 import {
   STAMP_ICONS,
   STAMP_STROKE,
@@ -86,6 +94,9 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
   const [localStorageWarning, setLocalWarning] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  /** What went wrong setting the pin. Both paths used to fail in silence. */
+  const [pinError, setPinError] = useState("");
+  const [pasted, setPasted] = useState("");
   const [platform, setPlatform] = useState<Platform>("apple");
   const router = useRouter();
 
@@ -189,7 +200,18 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
     }
   }
 
+  /**
+   * ⚠️ This pins the card to WHERE THE BROWSER IS RIGHT NOW, which is only the
+   * business if the owner happens to be standing in it — and admin gets done at
+   * home. It stays because it is the fastest path when they ARE on site, but it
+   * is no longer the only one, and the copy says what it does.
+   */
   function useMyLocation() {
+    setPinError("");
+    if (!navigator.geolocation) {
+      setPinError("Este navegador no puede darnos tu ubicación. Pega la liga de Google Maps.");
+      return;
+    }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -203,9 +225,56 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
         });
         setLocating(false);
       },
-      () => setLocating(false),
+      // Every one of these used to look identical to the button doing nothing.
+      (err) => {
+        setLocating(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setPinError(
+            "El navegador bloqueó la ubicación. Permítela en la barra de direcciones, o pega la liga de Google Maps."
+          );
+        } else if (err.code === err.TIMEOUT) {
+          setPinError("Tardó demasiado. Vuelve a intentar o pega la liga de Google Maps.");
+        } else {
+          setPinError("No pudimos obtener tu ubicación. Pega la liga de Google Maps.");
+        }
+      },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  }
+
+  const PIN_ERRORS: Record<PinFailure, string> = {
+    SHORT_LINK:
+      "Esa liga es corta (goo.gl) y no podemos abrirla desde aquí. Ábrela en el navegador y copia la liga larga que aparece arriba.",
+    NO_COORDS:
+      "No encontramos coordenadas ahí. Busca tu negocio en Google Maps, copia la liga de la barra de direcciones y pégala completa.",
+    OUT_OF_RANGE: "Esas coordenadas no corresponden a un lugar real. Revisa la liga.",
+  };
+
+  /** Set the pin from a pasted Maps link or a bare "lat, lng" pair. */
+  function applyPasted() {
+    const result = parsePin(pasted);
+    if (!result.ok) {
+      setPinError(PIN_ERRORS[result.reason]);
+      return;
+    }
+    setPinError("");
+    setPasted("");
+    setCfg({
+      ...cfg,
+      location: {
+        ...cfg.location,
+        latitude: result.pin.latitude,
+        longitude: result.pin.longitude,
+      },
+    });
+  }
+
+  /** Remove the geofence entirely. Without this a wrong pin ships forever:
+   *  passLocations() only bails when latitude is null. */
+  function clearLocation() {
+    setPinError("");
+    setPasted("");
+    setCfg({ ...cfg, location: undefined });
   }
 
   const input = inputCls;
@@ -246,11 +315,14 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
                   {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
                   {brand.logo ? "Cambiar" : "Subir logo"}
                   <input
-                    type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" className="hidden"
+                    type="file" accept={acceptAttr(LOGO_TYPES)} className="hidden"
                     onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "logo")}
                   />
                 </label>
               </div>
+              <p className="mt-2 text-xs text-gray-400">
+                {uploadHint(LOGO_TYPES)} · SVG o PNG se ven mejor
+              </p>
             </Field>
           </div>
         </Section>
@@ -490,16 +562,25 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
               {icons.map((icon) => (
                 <button
                   key={icon.id}
-                  onClick={() => setCfg({ ...cfg, card: { ...cfg.card, stampIcon: icon.id } })}
+                  onClick={() =>
+                    setCfg({
+                      ...cfg,
+                      card: { ...cfg.card, stampIcon: icon.id, customIconUrl: undefined },
+                    })
+                  }
                   title={icon.label}
                   className={`aspect-square rounded-xl border-2 flex items-center justify-center transition-all ${
-                    cfg.card.stampIcon === icon.id
+                    cfg.card.stampIcon === icon.id && !cfg.card.customIconUrl
                       ? "border-emerald-500 bg-emerald-50"
                       : "border-gray-200 hover:border-gray-300 bg-white"
                   }`}
                 >
                   <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
-                       stroke={cfg.card.stampIcon === icon.id ? brand.primaryColor : "#6b7280"}
+                       stroke={
+                         cfg.card.stampIcon === icon.id && !cfg.card.customIconUrl
+                           ? brand.primaryColor
+                           : "#6b7280"
+                       }
                        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d={icon.d} />
                   </svg>
@@ -512,14 +593,51 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
               )}
             </div>
 
-            <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer hover:text-gray-900">
-              {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-              Subir mi propio ícono
-              <input
-                type="file" accept="image/png,image/svg+xml" className="hidden"
-                onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "customIconUrl")}
-              />
-            </label>
+            {/* ⚠️ An uploaded icon OVERRIDES the gallery in strip-render.ts, so it
+                has to be visible and removable here. It was neither: once
+                uploaded there was no control to clear it, and picking a gallery
+                icon quietly did nothing to the card. */}
+            {cfg.card.customIconUrl && (
+              <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={cfg.card.customIconUrl}
+                  alt=""
+                  className="h-9 w-9 shrink-0 rounded-lg border border-emerald-200 bg-white object-contain p-1"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold text-emerald-800">Estás usando tu propio ícono</p>
+                  <p className="text-xs text-emerald-700">
+                    Sustituye al del catálogo. Quítalo para volver a elegir uno de arriba.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setCfg({ ...cfg, card: { ...cfg.card, customIconUrl: undefined } })}
+                  className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-red-600 transition-colors"
+                >
+                  <Trash2 size={13} />
+                  Quitar
+                </button>
+              </div>
+            )}
+
+            <div>
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer hover:text-gray-900">
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {cfg.card.customIconUrl ? "Cambiar mi ícono" : "Subir mi propio ícono"}
+                <input
+                  type="file" accept={acceptAttr(ICON_TYPES)} className="hidden"
+                  onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "customIconUrl")}
+                />
+              </label>
+              {/* The transparency rule is the one an owner cannot guess and
+                  cannot see until the card ships: the icon is drawn straight
+                  onto the ground colour, so anything with a background arrives
+                  as a white box around the mark. */}
+              <p className="mt-1.5 text-xs text-gray-400">
+                {uploadHint(ICON_TYPES)} · <strong className="font-semibold text-gray-500">con fondo transparente</strong>, o saldrá un cuadro blanco alrededor
+              </p>
+            </div>
           </Section>
         )}
 
@@ -552,11 +670,17 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
               {uploading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
               {cfg.card.stripImage ? "Cambiar foto" : "Subir foto"}
               <input
-                type="file" accept="image/*" className="hidden"
+                // ⚠️ Not `image/*`: that offers every HEIC on the machine — and
+                // every photo an iPhone takes is HEIC — which the server then
+                // refuses, for a reason the owner could not have predicted.
+                type="file" accept={acceptAttr(PHOTO_TYPES)} className="hidden"
                 onChange={(e) => e.target.files?.[0] && upload(e.target.files[0], "stripImage")}
               />
             </label>
           </div>
+          <p className="text-xs text-gray-400">
+            {uploadHint(PHOTO_TYPES)} · la recortamos y reducimos sola
+          </p>
 
           {cfg.card.stripImage && (
             <>
@@ -648,19 +772,82 @@ export default function WalletForm({ initial, businessName, primaryColor, logo }
           title="Notificación por ubicación"
           desc="La tarjeta aparece en la pantalla de bloqueo cuando el cliente pasa cerca."
         >
-          <button
-            onClick={useMyLocation}
-            disabled={locating}
-            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          {/* Two ways in. The paste box is first because it is the one that
+              works from wherever the owner actually is. */}
+          <Field
+            label="Pega la liga de tu negocio en Google Maps"
+            hint="Búscalo en Google Maps, copia la liga de la barra de direcciones y pégala aquí. También sirve 19.4326, -99.1332."
           >
-            {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
-            Usar mi ubicación actual
-          </button>
+            <div className="flex gap-2">
+              <input
+                value={pasted}
+                onChange={(e) => setPasted(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyPasted();
+                  }
+                }}
+                placeholder="https://www.google.com/maps/place/..."
+                className={input}
+              />
+              <button
+                onClick={applyPasted}
+                disabled={!pasted.trim()}
+                className="shrink-0 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-40 transition-colors"
+              >
+                Usar
+              </button>
+            </div>
+          </Field>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={useMyLocation}
+              disabled={locating}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {locating ? <Loader2 size={15} className="animate-spin" /> : <MapPin size={15} />}
+              Usar mi ubicación actual
+            </button>
+            <p className="text-xs leading-snug text-gray-500">
+              Sólo si estás <strong>en tu negocio</strong> ahora mismo.
+            </p>
+          </div>
+
+          {pinError && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-snug text-amber-800">
+              {pinError}
+            </p>
+          )}
+
           {cfg.location?.latitude != null && (
             <>
-              <p className="text-xs text-gray-500">
-                {cfg.location.latitude.toFixed(5)}, {cfg.location.longitude?.toFixed(5)}
-              </p>
+              {/* ⚠️ Coordinates alone tell an owner nothing about whether the pin
+                  is on their door or two streets over, and a wrong pin fails in
+                  total silence — the card simply never appears. The link is the
+                  only way to check. */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="font-mono text-xs text-gray-600">
+                  {formatPin(cfg.location.latitude, cfg.location.longitude ?? 0)}
+                </p>
+                <a
+                  href={mapsUrl(cfg.location.latitude, cfg.location.longitude ?? 0)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 no-underline hover:text-emerald-700"
+                >
+                  <ExternalLink size={13} />
+                  Verificar en el mapa
+                </a>
+                <button
+                  onClick={clearLocation}
+                  className="ml-auto inline-flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-600 transition-colors"
+                >
+                  <Trash2 size={13} />
+                  Quitar ubicación
+                </button>
+              </div>
 
               <Field
                 label="Qué dice en la pantalla de bloqueo"

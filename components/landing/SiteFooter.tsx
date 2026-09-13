@@ -22,7 +22,7 @@ export default function SiteFooter({ excludeVertical }: { excludeVertical?: stri
         </div>
         <div className="flex flex-col gap-2.5">
           <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1">Plataforma</h4>
-          {["POS & Pagos", "KDS Cocina", "Inventario", "Analíticas", "Facturación CFDI", "Fidelización"].map((l) => (
+          {["POS & Pagos", "KDS Cocina", "Inventario", "Fidelización", "Analíticas", "Corte de caja"].map((l) => (
             <a key={l} href="#modulos" className="text-sm text-gray-500 hover:text-emerald-500 transition-colors no-underline">{l}</a>
           ))}
         </div>
@@ -34,7 +34,7 @@ export default function SiteFooter({ excludeVertical }: { excludeVertical?: stri
         </div>
         <div className="flex flex-col gap-2.5">
           <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-1">Legal</h4>
-          {["Privacidad", "Términos de uso", "Cookies", "CFDI & SAT"].map((l) => (
+          {["Privacidad", "Términos de uso", "Cookies"].map((l) => (
             <a key={l} href="#" className="text-sm text-gray-500 hover:text-emerald-500 transition-colors no-underline">{l}</a>
           ))}
         </div>

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · RestKit",
   },
   description:
-    "POS, pantalla de cocina, inventario con recetas, analíticas, facturación CFDI 4.0 y fidelización digital — todo integrado en un solo panel, hecho para restaurantes en México.",
+    "POS, pantalla de cocina, inventario con recetas, corte de caja y fidelización en Apple y Google Wallet — todo integrado en un solo panel, hecho para restaurantes en México.",
   applicationName: "RestKit",
   keywords: [
     "POS restaurante",
@@ -29,8 +29,8 @@ export const metadata: Metadata = {
     "KDS",
     "inventario de restaurante",
     "recetas",
-    "CFDI 4.0",
-    "facturación SAT",
+    "corte de caja",
+    "tarjeta de lealtad",
     "fidelización digital",
     "Apple Wallet",
     "Google Wallet",
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     url: "/",
     title: "RestKit — El sistema operativo para restaurantes",
     description:
-      "Un ecosistema completo en lugar de 6 herramientas distintas: POS, cocina, inventario, analíticas, facturación CFDI y fidelización, todo conectado.",
+      "Un ecosistema completo en lugar de 6 herramientas distintas: POS, cocina, inventario, analíticas y fidelización, todo conectado.",
   },
 };
 

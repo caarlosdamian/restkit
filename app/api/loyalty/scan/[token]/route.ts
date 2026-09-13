@@ -49,6 +49,10 @@ async function resolve(token: string, businessIdStr: string) {
   if (!customer) return null;
   // Scoped to the scanning business, not just to a valid token.
   if (String(customer.businessId) !== businessIdStr) return null;
+  // Archived: treated exactly like a token from another business — not found,
+  // never "this card is real but disabled". The card may still be in a wallet,
+  // but the person is out of the programme and must not accrue.
+  if (customer.isActive === false) return null;
   return customer;
 }
 

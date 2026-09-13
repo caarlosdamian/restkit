@@ -9,7 +9,8 @@ import Business from '@/models/Business';
 // real API. `listResult` is swapped per-test; applyStripeEvent tests don't
 // touch Stripe so they're unaffected.
 let listResult: { data: unknown[] } = { data: [] };
-vi.mock('@/lib/stripe', () => ({
+vi.mock('@/lib/stripe', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/stripe')>()),
   stripe: {
     subscriptions: {
       list: vi.fn(async () => listResult),
