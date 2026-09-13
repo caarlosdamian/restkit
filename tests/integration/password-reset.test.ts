@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
+import { markEmailVerified } from '../helpers/verified';
 
 /**
  * The forgotten-password flow, end to end, through the real better-auth
@@ -58,6 +59,7 @@ describe('forgotten password, end to end', () => {
     await auth.api.signUpEmail({
       body: { email: EMAIL, password: OLD_PASSWORD, name: 'Carlos Damián' },
     });
+    await markEmailVerified(EMAIL);
 
     const sent = await requestResetAndReadEmail(EMAIL);
 
@@ -103,6 +105,7 @@ describe('forgotten password, end to end', () => {
   it('burns the token, so a forwarded email is not a second key', async () => {
     const email = 'segunda@negocio.mx';
     await auth.api.signUpEmail({ body: { email, password: OLD_PASSWORD, name: 'Ana' } });
+    await markEmailVerified(email);
 
     const sent = await requestResetAndReadEmail(email);
     const token = sent.match(/\/reset-password\/(\S+?)\?/)![1];
@@ -116,6 +119,7 @@ describe('forgotten password, end to end', () => {
   it('rejects a password under the shared minimum', async () => {
     const email = 'tercera@negocio.mx';
     await auth.api.signUpEmail({ body: { email, password: OLD_PASSWORD, name: 'Luis' } });
+    await markEmailVerified(email);
 
     const sent = await requestResetAndReadEmail(email);
     const token = sent.match(/\/reset-password\/(\S+?)\?/)![1];
@@ -144,6 +148,7 @@ describe('forgotten password, end to end', () => {
   it('signs every device out, the POS terminal included', async () => {
     const email = 'cuarta@negocio.mx';
     await auth.api.signUpEmail({ body: { email, password: OLD_PASSWORD, name: 'Sofía' } });
+    await markEmailVerified(email);
 
     // Stand in for the terminal that has been signed in since the shift began.
     const terminal = await auth.api.signInEmail({

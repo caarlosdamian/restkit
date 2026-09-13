@@ -110,7 +110,8 @@ export async function seedDemoData(businessName: string) {
         role: s.role,
         businessId: businessIdStr,
         employeeNumber: s.employeeNumber,
-        emailVerified: null,
+        // Sign-in refuses anything but `true` now (requireEmailVerification).
+        emailVerified: true,
         image: null,
         createdAt: now,
         updatedAt: now,

@@ -339,6 +339,12 @@ All routes require authentication via `better-auth`.
 - ⚠️ **POS is NOT gated by tier.** It was, and that locked POS-native loyalty — the whole differentiator against loyalia.app — out of Lite, the only tier that competes on price. Every plan gets the register; Lite is bounded by 6 tables / 2 seats instead. Enforced at `POST /api/tables` and `POST /api/staff`, which return **403 `PLAN_LIMIT_REACHED`** with the ceiling and an upgrade route (the forms render that as an amber "Ver planes" prompt, not a red error).
 - **Trial-without-card**: signup starts a 14-day `trialing`; trial expiry is time-based (no Stripe involvement until they pay). Gate: dashboard layout walls expired businesses (except `/dashboard/billing`) via the `x-pathname` header set in `proxy.ts`; `POST /api/pos-session/start` returns **402** when expired (can't open the register). The app is fully usable during the trial with **no Stripe config**; checkout just 500s with a clear "price not configured" until `STRIPE_PRICE_*` are set.
 
+### Auth — sign-up & verification
+- `POST /api/auth/register` — **the only way an account is created.** `{ name, email, password, businessName, plan?, period? }`. Creates the user via `auth.api.signUpEmail()`, creates its Business (trial-without-card), and better-auth mails the confirmation link. **409 `EMAIL_TAKEN`** for an address that already has an account, **400** for a bad field, **429 `RATE_LIMITED`** (5/hour/IP).
+- `GET /api/auth/verify-email?token=…&callbackURL=…` — better-auth. Confirms the address, **creates a session** (`autoSignInAfterVerification`) and redirects to `/dashboard?correo=verificado`.
+- `POST /api/auth/send-verification-email` — better-auth. Resends the link; wired to "envíalo de nuevo" on `/registro` and `/login`.
+- ⚠️ **`POST /api/business` was DELETED.** It took `ownerId` from the request body with **no auth at all**, so anyone could mint a business for any user id. It had exactly one caller — the registration page — and that logic now lives server-side in `/api/auth/register`.
+
 ### Auth — password reset (public)
 - `POST /api/auth/request-password-reset` — better-auth. `{ email, redirectTo: '/restablecer' }`. **Always 200**, whether or not the address has an account (see the Email section). Rate-limited by better-auth in production.
 - `GET /api/auth/reset-password/:token?callbackURL=…` — validates the token and redirects to `/restablecer?token=…`, or `?error=INVALID_TOKEN`.
@@ -386,10 +392,25 @@ That middle hop is kept deliberately rather than linking straight at our page: b
 
 ⚠️ **`revokeSessionsOnPasswordReset` is ON, and that signs the POS terminal out.** Real cost — the terminal is signed in as the manager and may be mid-shift. Kept because "I need to reset my password" is exactly the moment the account may already be in someone else's hands, and a reset that leaves the attacker's session alive resets nothing. The email and the confirmation screen both warn before it happens.
 
+### Opening an account
+`/registro` → `POST /api/auth/register` → confirmation mail → `/api/auth/verify-email` → `/dashboard`.
+
+⚠️ **Sign-in is refused until the address is confirmed** (`requireEmailVerification`), for the dashboard and the POS terminal alike — 403 `EMAIL_NOT_VERIFIED`, which `/login` renders as an amber "falta confirmar tu correo" with a resend button rather than a red "wrong password" for a password that was right.
+
+⚠️ **Turning that flag on changed two things about sign-up that are not obvious from the flag.**
+1. **It returns no session.** Anything that ran after sign-up assuming one is broken.
+2. ⚠️ **A sign-up with an address that already exists returns 200 and a SYNTHETIC user** — a plausible object whose id is in no collection (`shouldReturnGenericDuplicateResponse` in better-auth's sign-up route) so that sign-up cannot be used to test which addresses are customers. **The old flow handed that id straight to the unauthenticated `POST /api/business`, so every repeat sign-up minted a business owned by nobody**, on a 14-day trial, counted in every total. Registration is therefore a server route that reads the user back out of the database and never trusts the returned id. `tests/integration/register-api.test.ts` holds exactly this: a `signUpEmail` that reports success for a row that does not exist must create no business.
+
+**A duplicate address is answered plainly** ("ya existe una cuenta con ese correo"), the way every other product does it — which does confirm an address is registered. That is a deliberate split from `/recuperar` and `POST /api/loyalty/join/[slug]`, which refuse to: those can be pointed at a stranger's address, whereas a sign-up form has to tell the person in front of it why it will not proceed.
+
+⚠️ **`npm run verify:backfill` must run against any database that predates this** (`-- --apply` to commit). Nothing verified an address before, so every existing account has `emailVerified: false` and would be locked out the moment the flag ships — the owner, the managers, and the terminal mid-shift. `e2e/seed.ts` seeds `emailVerified: true` for the same reason.
+
+⚠️ **The confirmation link is a credential.** `/verify-email` creates a session, so opening the mail signs you in — which is what makes it work from a phone, and why the TTL is an hour and the copy says not to forward it. Only the FIRST open is given a session: a reused link still redirects, but hands out nothing. A test holds that, because "it starts erroring" is the obvious thing to assert and is not what happens.
+
 ### Changing the account's email
 `/dashboard/settings` → `components/settings/EmailForm.tsx` → better-auth's `POST /change-email`. Enabled by `user.changeEmail.enabled` in `lib/auth.ts`; the mail is sent from **`emailVerification.sendVerificationEmail`**, not from a `sendChangeEmailVerification` hook — that name is in better-auth's published docs but **does not exist in the installed 1.6.14**, which routes both flows through the one generic hook. Check `node_modules`, not the docs site, before adding options here.
 
-⚠️ **Nothing is written until the new address is confirmed.** Every user in this app has `emailVerified: false` (nothing verifies at sign-up), so `updateEmailWithoutVerification` is deliberately left OFF: turning it on would let anyone holding a stolen session move the account to an address they control in one request, with no proof they can read either address — session theft upgraded to account takeover. With it off, better-auth mails the **new** address and only swaps the email when that link is opened. `tests/integration/change-email.test.ts` asserts the old address still signs in, and the new one does not, *before* the link is opened.
+⚠️ **Nothing is written until the new address is confirmed.** `updateEmailWithoutVerification` is deliberately left OFF: turning it on would let anyone holding a stolen session move the account to an address they control in one request, with no proof they can read the address they are moving TO — session theft upgraded to account takeover. (Sign-up verification does not weaken this: reading the address the account was opened with says nothing about reading the next one.) With it off, better-auth mails the **new** address and only swaps the email when that link is opened. `tests/integration/change-email.test.ts` asserts the old address still signs in, and the new one does not, *before* the link is opened.
 
 ⚠️ **The confirmation link is a credential, not just a confirmation.** better-auth's `/verify-email` **creates a session** when the browser opening it has none — which is what makes the flow work from a phone, and what makes the mail worth protecting. Hence the 1-hour TTL and the warning in the copy.
 
@@ -662,5 +683,5 @@ All dashboard pages are async server components that:
 
 ---
 
-**Last updated**: 2026-09-07  
+**Last updated**: 2026-09-12  
 **Status**: MVP + POS v2. POS lives only under `/pos` with two-layer auth (terminal session + waiter PIN), per-waiter sales reporting, busy-table tracking, a Kitchen Display System, and recipe-linked inventory. Recent work: Fase 1 (POS auth hardening), Fase 2 (waiter PIN + attribution), Fase 3 (ventas por mesero), ADMIN-creation fix (`auth.api.signUpEmail`), POS removed from dashboard, busy-table filters, automated test suites (Vitest + Playwright, see `docs/FEATURES_AND_TESTING.md`), unique active-order-per-table index (race fix), `/dashboard/tables` (fresh businesses can now self-serve table setup — previously only possible via the demo seed routes), **Stripe subscription billing** (14-day trial-without-card, pricing→signup plan selection, checkout/portal/webhook, POS + dashboard subscription gate), and **POS-native loyalty** (Fases 1–2 + reporting: append-only ledger on `Visit`, phone attach at cobro, generated `strip.png` cards with a 58-icon catalogue and live preview, reward-ready state and redemption, purchase history with reversals, cashback with threshold redemption split correctly out of the cash-up, ROI panel and CSV export). Fixed along the way: "Premios entregados" always read zero, the stamp counter reset at the moment of earning, `/c/` was unauthenticated over enumerable ObjectIds, the Apple pass could be issued permanently un-updatable, and the customer email index was `sparse` where it needed to be partial.
