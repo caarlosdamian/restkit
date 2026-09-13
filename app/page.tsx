@@ -4,10 +4,13 @@ import { headers } from "next/headers";
 import PricingSection from "@/components/landing/PricingSection";
 import SiteNav from "@/components/landing/SiteNav";
 import SiteFooter from "@/components/landing/SiteFooter";
+import LoyaltyCardCarousel from "@/components/landing/LoyaltyCardCarousel";
+import VerticalSampleCard from "@/components/loyalty/VerticalSampleCard";
+import { VERTICALS } from "@/lib/verticals";
 import {
   BarChart3, QrCode, Bell, ArrowRight,
   ChevronRight, ShoppingCart, Monitor, Package, FileText,
-  Truck, Gift, Check, Zap, Shield, Globe, Users,
+  Gift, Check, Zap, Shield, Globe, Users,
   TrendingUp, Clock, Star, CheckCircle2, Layers,
 } from "lucide-react";
 
@@ -21,13 +24,12 @@ export default async function LandingPage() {
     <div className="min-h-screen bg-white text-gray-900 antialiased">
       <SiteNav isAuthenticated={!!session} panelHref={panelHref} />
       <Hero />
+      <LoyaltySpotlight />
       <SocialProof />
       <Modules />
-      <LoyaltySpotlight />
       <AnalyticsPreview />
       <MexicoFirst />
       <PricingSection />
-      <Testimonials />
       <CtaBanner />
       <SiteFooter />
     </div>
@@ -53,7 +55,7 @@ function Hero() {
               <span className="text-emerald-500">desde un solo lugar</span>
             </h1>
             <p className="text-lg text-gray-500 leading-relaxed mb-8 max-w-[500px]">
-              POS, cocina, inventario, analíticas, facturación SAT y fidelización digital — todo integrado, sin complicaciones, hecho para México.
+              POS, cocina, inventario, analíticas y fidelización digital en Apple y Google Wallet — todo integrado, sin complicaciones, hecho para México.
             </p>
             <div className="flex gap-3 flex-wrap">
               <Link href="/registro" className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-sm no-underline">
@@ -64,7 +66,7 @@ function Hero() {
               </a>
             </div>
             <div className="mt-8 flex flex-wrap gap-5">
-              {["Sin contrato anual", "Soporte en español", "Facturación CFDI 4.0"].map((t) => (
+              {["Sin contrato anual", "Soporte en español", "Datos fiscales en el ticket"].map((t) => (
                 <span key={t} className="flex items-center gap-1.5 text-sm text-gray-500">
                   <CheckCircle2 size={15} className="text-emerald-500 shrink-0" /> {t}
                 </span>
@@ -149,8 +151,8 @@ function DashboardMockup() {
 
       {/* Bottom bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-emerald-500 mt-1">
-        <span className="text-xs font-semibold text-emerald-100">Próxima factura CFDI lista</span>
-        <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">Enviar <ArrowRight size={11} /></span>
+        <span className="text-xs font-semibold text-emerald-100">Mesa 7 · sello agregado al cobrar</span>
+        <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full">Ver tarjeta <ArrowRight size={11} /></span>
       </div>
     </div>
   );
@@ -159,16 +161,16 @@ function DashboardMockup() {
 /* ─── SOCIAL PROOF ─── */
 function SocialProof() {
   const stats = [
-    { value: "1,200+", label: "Restaurantes activos" },
-    { value: "$2.4M", label: "Procesados al mes" },
-    { value: "99.9%", label: "Uptime garantizado" },
-    { value: "< 5 min", label: "Para empezar a vender" },
+    { value: "14 días", label: "De prueba, sin tarjeta" },
+    { value: "$249", label: "Al mes, plan Lite en MXN" },
+    { value: "2", label: "Wallets: Apple y Google" },
+    { value: "0", label: "Instalaciones o servidor local" },
   ];
   return (
     <section className="py-14 bg-gray-50 border-b border-gray-100">
       <div className="max-w-[1200px] mx-auto px-6">
         <p className="text-center text-xs font-bold tracking-widest uppercase text-gray-400 mb-10">
-          Confiado por restaurantes en todo México
+          Todo incluido desde el primer día
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
           {stats.map((s) => (
@@ -185,53 +187,57 @@ function SocialProof() {
 
 /* ─── MODULES ─── */
 function Modules() {
+  // Every bullet here has to point at something that ships today. The two
+  // modules that used to sit at the end of this grid — CFDI and delivery — are
+  // marked "Próximamente" in the dashboard sidebar, which is where they belong
+  // until they exist.
   const modules = [
     {
       icon: ShoppingCart,
       tag: "POS & Pagos",
       title: "Punto de venta móvil",
-      desc: "Toma órdenes desde cualquier dispositivo, divide cuentas y acepta pagos integrados. Sin caja registradora física, sin complicaciones.",
-      bullets: ["División de cuenta", "Pagos con tarjeta", "Modo sin internet"],
+      desc: "Toma órdenes desde cualquier dispositivo, mándalas a cocina y cobra en efectivo, tarjeta o transferencia. Sin caja registradora física.",
+      bullets: ["Órdenes por mesa", "Efectivo, tarjeta o transferencia", "Ticket de 80 mm"],
       color: "emerald",
     },
     {
       icon: Monitor,
       tag: "Cocina",
       title: "Pantalla de cocina (KDS)",
-      desc: "Envía órdenes directo a los monitores de cocina o barra. Controla tiempos de preparación y elimina cuellos de botella.",
-      bullets: ["Alertas de tiempo", "Por estación", "Historial de prep"],
+      desc: "Envía las comandas directo al monitor de cocina. Cada ticket lleva su cronómetro y se marca como listo con un toque.",
+      bullets: ["Cronómetro por comanda", "Listo con un toque", "Comanda impresa"],
       color: "blue",
     },
     {
       icon: Package,
       tag: "Inventario",
       title: "Control de ingredientes",
-      desc: "Descuenta insumos automáticamente al vender. Define recetas, fija alertas de stock mínimo y reduce el desperdicio.",
-      bullets: ["Recetas inteligentes", "Alertas de stock", "Reportes de merma"],
+      desc: "Descuenta insumos automáticamente al vender. Define recetas por producto, fija alertas de stock mínimo y registra la merma.",
+      bullets: ["Recetas por producto", "Alertas de stock", "Registro de merma"],
       color: "violet",
+    },
+    {
+      icon: Gift,
+      tag: "Fidelización",
+      title: "Sellos o cashback, sin app",
+      desc: "El sello se pone solo al cobrar — nadie tiene que acordarse. La tarjeta vive en Apple y Google Wallet y se actualiza sola.",
+      bullets: ["Apple y Google Wallet", "Sellos o cashback", "QR de auto-inscripción"],
+      color: "rose",
     },
     {
       icon: BarChart3,
       tag: "Analíticas",
-      title: "Reportes en tiempo real",
-      desc: "Más de 25 reportes personalizables: ventas, cancelaciones, rendimiento por empleado e inventario — desde tu celular.",
-      bullets: ["25+ reportes", "Por turno o fecha", "Exporta a Excel"],
+      title: "Ventas y clientes de un vistazo",
+      desc: "Ventas del día, ticket promedio, qué mesero vendió más y qué tanto regresan tus clientes con tarjeta — desde tu celular.",
+      bullets: ["Ventas por mesero", "Historial de pedidos", "Exporta a CSV"],
       color: "amber",
     },
     {
       icon: FileText,
-      tag: "Facturación",
-      title: "CFDI 4.0 automático",
-      desc: "Genera y envía facturas fiscales al correo del cliente en segundos. Compatible con SAT, sin complementos adicionales.",
-      bullets: ["CFDI 4.0", "Timbrado al instante", "Envío por email"],
-      color: "rose",
-    },
-    {
-      icon: Truck,
-      tag: "Delivery",
-      title: "Pedidos y entrega",
-      desc: "Integra órdenes de apps de terceros, menú digital por QR y kiosco de autoservicio en un solo panel.",
-      bullets: ["Menú QR digital", "Integración delivery", "Kiosco self-service"],
+      tag: "Caja",
+      title: "Corte de caja por turno",
+      desc: "Abre y cierra la caja con fondo inicial. Al cerrar te dice cuánto debería haber, cuánto hay y de cuánto es la diferencia.",
+      bullets: ["Fondo y cierre", "Esperado vs. real", "Reimprime cualquier ticket"],
       color: "cyan",
     },
   ];
@@ -254,7 +260,7 @@ function Modules() {
             Todo lo que tu restaurante necesita
           </h2>
           <p className="text-base text-gray-500 max-w-[560px]">
-            Un ecosistema completo en lugar de 6 herramientas distintas. Desde el POS hasta la factura, todo conectado.
+            Un ecosistema completo en lugar de 6 herramientas distintas. Desde la orden en la mesa hasta el corte de caja, todo conectado.
           </p>
         </div>
 
@@ -289,69 +295,58 @@ function Modules() {
 
 /* ─── LOYALTY SPOTLIGHT ─── */
 function LoyaltySpotlight() {
+  // The real card, once per trade, rendered on the server and handed to the
+  // carousel. The mockup that used to sit here was hand-drawn HTML of a card
+  // that does not exist — hardcoded stamps, a taco and two fake wallet buttons.
+  // Twelve renders of the actual component are both more honest and a better
+  // argument: an owner sees their own trade in the row, in its own colour.
+  const slides = VERTICALS.map((v) => ({
+    slug: v.slug,
+    label: v.plural.charAt(0).toUpperCase() + v.plural.slice(1),
+    mechanic: v.mechanic === "cashback" ? "Cashback" : "Sellos",
+    card: <VerticalSampleCard v={v} />,
+  }));
+
   return (
     <section className="py-20 bg-gray-50 border-y border-gray-100" id="fidelizacion">
       <div className="max-w-[1200px] mx-auto px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-start mb-12">
           <div>
             <span className="text-xs font-bold tracking-widest uppercase text-emerald-600">Fidelización incluida</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mt-2 mb-4">
               Tarjetas de lealtad en Apple y Google Wallet
             </h2>
             <p className="text-base text-gray-500 leading-relaxed mb-6">
-              Sin apps extra, sin tarjetas físicas. Tus clientes guardan su tarjeta de sellos directo en su wallet. Cada visita actualiza la tarjeta en tiempo real.
+              Sin apps extra, sin tarjetas físicas. Tus clientes guardan su tarjeta directo en su wallet, y cada visita la actualiza sola.
             </p>
-            <ul className="space-y-3 mb-8">
-              {[
-                "QR único por cliente — escaneas y registras la visita",
-                "Notificaciones push cuando están cerca del premio",
-                "Compatible con iPhone y Android desde el día 1",
-                "Integrado con el POS — sin doble captura",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
-                  <CheckCircle2 size={17} className="text-emerald-500 shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
             <Link href="/registro" className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-5 py-2.5 rounded-xl transition-all shadow-sm no-underline text-sm">
               Crear mi programa <ArrowRight size={16} />
             </Link>
           </div>
 
-          {/* Wallet card preview */}
-          <div className="flex justify-center">
-            <div className="bg-white border border-gray-200 rounded-2xl p-7 w-[300px] shadow-xl">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                  <Gift size={20} />
-                </div>
-                <div>
-                  <p className="font-bold text-sm text-gray-900">Tacos El Norte</p>
-                  <p className="text-xs text-gray-400">Tarjeta de lealtad</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-5 gap-2 mb-4">
-                {[...Array(10)].map((_, i) => (
-                  <div key={i} className={`aspect-square rounded-full border-2 flex items-center justify-center text-emerald-500 ${i < 7 ? "bg-emerald-500/10 border-emerald-500" : "border-gray-200"}`}>
-                    {i < 7 && <Check size={13} strokeWidth={3} />}
-                  </div>
-                ))}
-              </div>
-              <div className="h-1.5 bg-gray-100 rounded-full mb-3 overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full" style={{ width: "70%" }} />
-              </div>
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>7 de 10 visitas</span>
-                <span className="text-emerald-600 font-semibold">1 taco gratis</span>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <div className="flex-1 bg-black text-white text-[0.65rem] font-semibold rounded-lg py-1.5 text-center">Apple Wallet</div>
-                <div className="flex-1 border border-gray-200 text-gray-700 text-[0.65rem] font-semibold rounded-lg py-1.5 text-center">Google Wallet</div>
-              </div>
-            </div>
-          </div>
+          <ul className="space-y-3 lg:pt-10">
+            {[
+              "QR único por cliente — escaneas y registras la visita",
+              "Notificaciones push cuando están cerca del premio",
+              "Compatible con iPhone y Android desde el día 1",
+              "Integrado con el POS — sin doble captura",
+            ].map((f) => (
+              <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
+                <CheckCircle2 size={17} className="text-emerald-500 shrink-0 mt-0.5" />
+                {f}
+              </li>
+            ))}
+          </ul>
         </div>
+      </div>
+
+      {/* Full-bleed: the row is meant to run past the edge, so it reads as
+          scrollable before anyone touches it. */}
+      <div className="max-w-[1200px] mx-auto">
+        <p className="px-6 mb-4 text-xs font-bold uppercase tracking-wider text-gray-400">
+          Sellos o cashback · fondo claro, oscuro o en tu color · con la foto de tu local
+        </p>
+        <LoyaltyCardCarousel slides={slides} />
       </div>
     </section>
   );
@@ -360,12 +355,12 @@ function LoyaltySpotlight() {
 /* ─── ANALYTICS ─── */
 function AnalyticsPreview() {
   const reports = [
-    { icon: TrendingUp, label: "Ventas por hora" },
-    { icon: Users, label: "Rendimiento por mesero" },
-    { icon: Package, label: "Rotación de inventario" },
-    { icon: Star, label: "Productos top" },
-    { icon: QrCode, label: "Órdenes por canal" },
-    { icon: Bell, label: "Cancelaciones" },
+    { icon: TrendingUp, label: "Ventas de los últimos 7 días" },
+    { icon: Users, label: "Ventas por mesero" },
+    { icon: Package, label: "Stock bajo" },
+    { icon: Star, label: "Clientes frecuentes" },
+    { icon: QrCode, label: "Ticket promedio" },
+    { icon: Bell, label: "Pedidos cancelados" },
   ];
   return (
     <section className="py-24" id="analytics">
@@ -389,7 +384,7 @@ function AnalyticsPreview() {
                   </div>
                 ) : (
                   <p className="text-2xl font-extrabold tracking-tight text-gray-900">
-                    {["$18,420", "4.8 / 5", "92%", "Tacos x3", "Delivery 34%", "1.2%"][i - 1]}
+                    {["$18,420", "3 insumos", "128", "$247", "1.2%"][i - 1]}
                   </p>
                 )}
               </div>
@@ -399,17 +394,17 @@ function AnalyticsPreview() {
           <div>
             <span className="text-xs font-bold tracking-widest uppercase text-emerald-600">Analíticas</span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mt-2 mb-4">
-              25+ reportes desde tu celular
+              Tus números, desde tu celular
             </h2>
             <p className="text-base text-gray-500 leading-relaxed mb-6">
-              Decisiones en tiempo real sin esperar al cierre. Consulta ventas, desempeño por turno, productos más vendidos y alertas de inventario — donde estés.
+              Decisiones en tiempo real sin esperar al cierre. Consulta ventas, ticket promedio, qué mesero vendió más y qué tanto regresan tus clientes con tarjeta — donde estés.
             </p>
             <ul className="space-y-3">
               {[
-                "Reportes por turno, día, semana o mes",
-                "Alertas automáticas de bajo inventario",
-                "Comparativo con períodos anteriores",
-                "Exportación a Excel o PDF",
+                "Filtra por hoy, 7 días o 30 días",
+                "Ventas y propinas por mesero",
+                "Avisos de stock bajo en el panel",
+                "Exporta tu programa de lealtad a CSV",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-3 text-sm text-gray-700">
                   <CheckCircle2 size={17} className="text-emerald-500 shrink-0 mt-0.5" /> {f}
@@ -426,8 +421,8 @@ function AnalyticsPreview() {
 /* ─── MEXICO FIRST ─── */
 function MexicoFirst() {
   const items = [
-    { icon: FileText, title: "CFDI 4.0 incluido", desc: "Facturación fiscal automática. Timbrado ante SAT en segundos, sin pagar módulos extra." },
-    { icon: Shield, title: "Datos en México", desc: "Tu información almacenada en servidores mexicanos. Cumplimos con la Ley Federal de Protección de Datos." },
+    { icon: FileText, title: "Datos fiscales en el ticket", desc: "Razón social, RFC y domicilio fiscal impresos en cada ticket de 80 mm. Configúralos una vez y listo." },
+    { icon: Shield, title: "Sin contrato ni permanencia", desc: "14 días de prueba sin tarjeta. Después, mes a mes en pesos — cancelas desde el panel cuando quieras." },
     { icon: Globe, title: "Soporte en español", desc: "Equipo de soporte 100% en español, en tu zona horaria. Sin bots, sin traducciones raras." },
     { icon: Layers, title: "Sin instalaciones", desc: "Todo en la nube. Sin servidor local, sin actualizaciones manuales, sin técnico de visita." },
   ];
@@ -459,46 +454,6 @@ function MexicoFirst() {
   );
 }
 
-/* ─── TESTIMONIALS ─── */
-function Testimonials() {
-  const items = [
-    { name: "Roberto Salinas", role: "Dueño, Tacos El Norte · CDMX", quote: "Cambié de SoftRestaurant a RestKit y nunca lo lamenté. El sistema es más rápido, más barato y el soporte responde el mismo día." },
-    { name: "Daniela Orozco", role: "Gerente, Café Aroma · Guadalajara", quote: "La pantalla de cocina redujo los errores en un 60%. Antes mis cocineros perdían comandas; ahora todo está en la pantalla al instante." },
-    { name: "Jorge Mena", role: "Fundador, Pizza Molino · Monterrey", quote: "El módulo de inventario solo ya valió la inversión. Sé exactamente cuánta harina me queda sin tener que contar a mano cada noche." },
-  ];
-  return (
-    <section className="py-20 bg-gray-50 border-t border-gray-100">
-      <div className="max-w-[1200px] mx-auto px-6">
-        <div className="text-center mb-12">
-          <span className="text-xs font-bold tracking-widest uppercase text-emerald-600">Testimonios</span>
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 mt-2">
-            Restauranteros reales, resultados reales
-          </h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {items.map((t) => (
-            <blockquote key={t.name} className="bg-white border border-gray-200 rounded-2xl p-7 m-0">
-              <div className="flex gap-0.5 mb-4">
-                {[...Array(5)].map((_, i) => <Star key={i} size={14} className="text-amber-400 fill-amber-400" />)}
-              </div>
-              <p className="text-sm text-gray-700 leading-relaxed mb-6 italic">&ldquo;{t.quote}&rdquo;</p>
-              <footer className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold shrink-0">
-                  {t.name[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-900">{t.name}</p>
-                  <p className="text-xs text-gray-400">{t.role}</p>
-                </div>
-              </footer>
-            </blockquote>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 /* ─── CTA BANNER ─── */
 function CtaBanner() {
   return (
@@ -511,7 +466,7 @@ function CtaBanner() {
           Tu restaurante moderno empieza hoy
         </h2>
         <p className="text-base text-gray-500 mb-8 max-w-[480px]">
-          Únete a más de 1,200 restaurantes en México que ya dejaron atrás el software del siglo pasado.
+          Configura tu menú, tus mesas y tu programa de lealtad hoy mismo. Sin tarjeta, sin instalaciones, sin técnico de visita.
         </p>
         <div className="flex gap-3 flex-wrap justify-center">
           <Link href="/registro" className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold px-7 py-3.5 rounded-xl transition-all shadow-sm no-underline">

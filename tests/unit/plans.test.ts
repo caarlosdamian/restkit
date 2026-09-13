@@ -92,9 +92,26 @@ describe('plan capacity limits', () => {
     expect(limitFor('basic', 'staff')).toBe(10);
   });
 
-  it('leaves Profesional uncapped', () => {
+  it('leaves Profesional uncapped on tables but NOT on seats', () => {
     expect(limitFor('pro', 'tables')).toBeNull();
-    expect(limitFor('pro', 'staff')).toBeNull();
+    // Deliberately a finite number. "Usuarios ilimitados" is unbounded cost at a
+    // flat price, and it can't be walked back once somebody has bought it.
+    expect(limitFor('pro', 'staff')).toBe(50);
+  });
+
+  it('gives every plan a seat ceiling', () => {
+    for (const plan of PLANS) {
+      expect(limitFor(plan.id, 'staff')).toBeGreaterThan(0);
+    }
+  });
+
+  it('never shrinks capacity as the price goes up', () => {
+    // A more expensive plan holding LESS than a cheaper one is always a bug.
+    const ordered = [...PLANS].sort((a, b) => a.monthly - b.monthly);
+    for (const limit of ['tables', 'staff'] as const) {
+      const caps = ordered.map((p) => limitFor(p.id, limit) ?? Infinity);
+      expect(caps).toEqual([...caps].sort((a, b) => a - b));
+    }
   });
 
   it('reports the ceiling only once it is actually reached', () => {
@@ -106,5 +123,50 @@ describe('plan capacity limits', () => {
   it('never reports a ceiling where there is none', () => {
     expect(wouldExceed('pro', 'tables', 9999)).toBe(false);
     expect(wouldExceed('basic', 'tables', 9999)).toBe(false);
+  });
+
+  it('enforces the Profesional seat ceiling', () => {
+    expect(wouldExceed('pro', 'staff', 49)).toBe(false);
+    expect(wouldExceed('pro', 'staff', 50)).toBe(true);
+  });
+});
+
+/**
+ * The plan cards are a promise to somebody about to enter a card number, and
+ * they are the only place in the app where a feature can be advertised without
+ * any code behind it. These guard the two ways that has already gone wrong:
+ * billing for something unbuilt, and promising something unbounded.
+ */
+describe('advertised features match the product', () => {
+  const bullets = PLANS.flatMap((p) => p.features.map((f) => f.toLowerCase()));
+
+  it('advertises nothing the product does not ship', () => {
+    // Everything here was on a paid plan card while living in the sidebar's
+    // "Próximamente" section. Add to this list, never remove — a feature that
+    // ships gets described in its own words, not by lifting the ban.
+    const unbuilt = ['cfdi', 'factura', 'timbrado', 'sat', 'delivery', 'kiosco', 'sin internet'];
+    for (const bullet of bullets) {
+      for (const term of unbuilt) {
+        expect(bullet, `plan feature promises "${term}"`).not.toContain(term);
+      }
+    }
+  });
+
+  it('never promises an unbounded quantity of a metered resource', () => {
+    // "Clientes ilimitados" is fine — a customer row costs nothing and is never
+    // gated. Seats and tables are metered by PLAN_LIMITS, so advertising them as
+    // unlimited would contradict the gate that actually runs.
+    for (const bullet of bullets.filter((b) => b.includes('ilimitad'))) {
+      expect(bullet, 'seats are metered by PLAN_LIMITS').not.toContain('usuario');
+    }
+  });
+
+  it('quotes a seat count that matches the enforced ceiling', () => {
+    for (const plan of PLANS) {
+      const seats = limitFor(plan.id, 'staff');
+      const quoted = plan.features.find((f) => /usuario/i.test(f));
+      expect(quoted, `${plan.name} does not mention seats`).toBeDefined();
+      expect(quoted).toContain(String(seats));
+    }
   });
 });
