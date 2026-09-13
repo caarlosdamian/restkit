@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "fix:indexes": "node --env-file=.env scripts/fix-indexes.mjs",
-    "verify:backfill": "node --env-file=.env scripts/verify-existing-users.mjs"
+    "verify:backfill": "node --env-file=.env scripts/verify-existing-users.mjs",
+    "grant:sub": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file=.env scripts/grant-subscription.mts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
