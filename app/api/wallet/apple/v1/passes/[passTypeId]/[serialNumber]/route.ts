@@ -3,6 +3,7 @@ import { generateApplePass } from '@/lib/apple-pass';
 import { businessRepository } from '@/repositories/business.repository';
 import Customer from '@/models/Customer';
 import dbConnect from '@/lib/db';
+import { loyaltyService } from '@/services/loyalty.service';
 
 type Params = Promise<{ passTypeId: string; serialNumber: string }>;
 
@@ -29,7 +30,12 @@ export async function GET(req: Request, { params }: { params: Params }) {
   if (!business) return new Response(null, { status: 404 });
 
   try {
-    const passBuffer = await generateApplePass(customer, business);
+    // ⚠️ This is the ONLY place the decision can be made. The APNs push carries
+    // no payload — it just tells the device to come here — so whether the
+    // customer gets a lock-screen notification is settled by what this pass
+    // contains, not by what was sent. A removal updates the card in silence.
+    const silent = await loyaltyService.lastChangeWasDecrease(serialNumber);
+    const passBuffer = await generateApplePass(customer, business, { silent });
     return new Response(passBuffer as unknown as BodyInit, {
       headers: {
         'Content-Type': 'application/vnd.apple.pkpass',

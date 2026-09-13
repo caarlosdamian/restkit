@@ -57,6 +57,35 @@ export default function CustomerHistory({ customerId, initial }: Props) {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
+  /**
+   * ⚠️ Re-sync when the server sends a new history.
+   *
+   * `useState(initial.entries)` reads its argument on the FIRST render only, so
+   * without this the list is frozen at whatever was on screen when the page
+   * mounted. Recording a sale from `RecordVisitButton` calls `router.refresh()`,
+   * which re-runs the server component and hands us a fresh `initial` — and the
+   * list silently ignored it. The stamp counter above updated (it is rendered by
+   * the server component directly) while "Historial de compras" kept showing the
+   * old movements, which is what made it look like the sale had not registered.
+   *
+   * Removing a purchase never showed the bug because `remove()` below calls
+   * `setEntries` with the server's response itself.
+   *
+   * Comparing by reference is what makes this safe: a client-only re-render
+   * (any `setState` here) keeps the same props object, so this does not fire;
+   * only a genuine server render produces a new one. Paging back to page 0 is
+   * deliberate — the list changed underneath, so continuing to append to a
+   * stale page 3 would interleave old and new movements.
+   */
+  const [syncedFrom, setSyncedFrom] = useState(initial);
+  if (initial !== syncedFrom) {
+    setSyncedFrom(initial);
+    setEntries(initial.entries);
+    setHasMore(initial.hasMore);
+    setTotal(initial.total);
+    setPage(0);
+  }
+
   async function loadMore() {
     setBusy("more");
     try {

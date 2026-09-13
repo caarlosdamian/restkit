@@ -6,6 +6,7 @@ import {
   VALUE_TOKEN,
   MAX_MESSAGE,
   MAX_RELEVANT_TEXT,
+  withoutChangeMessages,
 } from '@/lib/card-layout';
 import { DEFAULT_LOYALTY, loyaltyConfig } from '@/lib/loyalty';
 import { passLocations } from '@/lib/apple-pass';
@@ -163,5 +164,58 @@ describe('the geofence on the pass itself', () => {
   it('still says something useful when the owner wrote nothing', () => {
     const { locations } = at({ latitude: 19.4326, longitude: -99.1332 });
     expect(locations?.[0].relevantText).toBe('Llevas 3 de 10 visitas');
+  });
+});
+
+describe('a silent update, for a purchase the manager removed', () => {
+  const business = () => ({ settings: { loyalty: DEFAULT_LOYALTY } }) as never;
+
+  const layoutFor = (currentVisits: number) =>
+    buildCardLayout({
+      businessName: 'Matruma Café',
+      config: loyaltyConfig(business()),
+      customer: { name: 'Ana', stats: { totalVisits: currentVisits, currentVisits, cashbackBalance: 0 } },
+      hasStrip: true,
+    });
+
+  const allFields = (layout: ReturnType<typeof buildCardLayout>) => [
+    ...layout.header,
+    ...layout.secondary,
+    ...layout.auxiliary,
+    ...layout.back,
+  ];
+
+  it('drops every changeMessage, which is what makes Apple stay quiet', () => {
+    const layout = layoutFor(4);
+    // Precondition: the loud version really does carry one, or this asserts nothing.
+    expect(allFields(layout).some((f) => f.changeMessage)).toBe(true);
+
+    const quiet = [
+      ...withoutChangeMessages(layout.header),
+      ...withoutChangeMessages(layout.secondary),
+      ...withoutChangeMessages(layout.auxiliary),
+      ...withoutChangeMessages(layout.back),
+    ];
+    expect(quiet.some((f) => f.changeMessage !== undefined)).toBe(false);
+  });
+
+  it('keeps the values, because the card must still become correct', () => {
+    // ⚠️ The whole point of the change: silence used to mean skipping the push,
+    // which left the iPhone showing a stamp the customer no longer had.
+    const loud = allFields(layoutFor(4));
+    const quiet = withoutChangeMessages(loud);
+
+    expect(quiet).toHaveLength(loud.length);
+    expect(quiet.map((f) => [f.key, f.label, f.value])).toEqual(
+      loud.map((f) => [f.key, f.label, f.value])
+    );
+    expect(quiet.find((f) => f.key === 'progress')?.value).toBe('4 de 10');
+  });
+
+  it('leaves the original fields untouched', () => {
+    const layout = layoutFor(4);
+    const before = allFields(layout).filter((f) => f.changeMessage).length;
+    withoutChangeMessages(allFields(layout));
+    expect(allFields(layout).filter((f) => f.changeMessage).length).toBe(before);
   });
 });

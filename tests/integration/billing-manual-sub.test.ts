@@ -181,3 +181,39 @@ describe('a subscription created outside Checkout', () => {
     expect((await Business.findById(businessId))!.subscription!.status).toBe('past_due');
   });
 });
+
+describe('an event that cannot be processed', () => {
+  it('⚠️ does not 500 on a businessId somebody mistyped into the metadata', async () => {
+    // A CastError here reaches the webhook route as a 500, and Stripe then
+    // retries the same doomed event for three days. A value that cannot be an
+    // id means "unknown tenant", which is a no-op, not an outage.
+    const businessId = await trialingBusiness({ stripeCustomerId: 'cus_manual' });
+
+    await expect(
+      billingService.applyStripeEvent(
+        event({
+          id: 'sub_typo',
+          status: 'active',
+          customer: 'cus_manual',
+          metadata: { businessId: 'el negocio de carlos' },
+        })
+      )
+    ).resolves.toBeUndefined();
+
+    // It still found them by the customer id, so nothing was lost.
+    const business = await Business.findById(businessId);
+    expect(business!.subscription!.stripeSubscriptionId).toBe('sub_typo');
+  });
+
+  it('is a no-op when nothing identifies the business at all', async () => {
+    const businessId = await trialingBusiness();
+
+    await expect(
+      billingService.applyStripeEvent(
+        event({ id: 'sub_x', status: 'active', customer: 'cus_nobody', metadata: { businessId: '???' } })
+      )
+    ).resolves.toBeUndefined();
+
+    expect((await Business.findById(businessId))!.subscription!.status).toBe('trialing');
+  });
+});

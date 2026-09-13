@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import type Stripe from 'stripe';
 import Business from '@/models/Business';
 import dbConnect from '@/lib/db';
@@ -29,14 +30,64 @@ function periodEnd(sub: Stripe.Subscription): Date | undefined {
   return unix ? new Date(unix * 1000) : undefined;
 }
 
+/**
+ * Work out which business a subscription belongs to.
+ *
+ * Four ways, cheapest first, because a subscription can be created in more
+ * places than Checkout and each one knows less than the last:
+ *
+ *  1. `sub.metadata.businessId` — what our own checkout sets.
+ *  2. The customer id we stored when they opened checkout.
+ *  3. `customer.metadata.businessId` — also ours, and it survives even if the
+ *     stored id was never written because they abandoned the redirect.
+ *  4. The customer's EMAIL, matched against the account. ⚠️ This is the one
+ *     that makes a subscription created entirely in the Stripe dashboard work:
+ *     without it, a customer we have never seen resolves to nothing and the
+ *     event is dropped in silence, so the only way to sell a plan off-line was
+ *     to first make the owner click a plan just to mint a customer record.
+ *
+ * Returning null is the safe answer — the caller leaves everything alone — so
+ * every lookup here is allowed to fail quietly rather than fail the webhook.
+ */
 async function findBusinessId(sub: Stripe.Subscription): Promise<string | null> {
   const fromMeta = sub.metadata?.businessId;
-  if (fromMeta) return fromMeta;
-  // Fall back to the customer id we stored at checkout.
+  if (fromMeta) {
+    // ⚠️ Metadata is typed by whoever created the subscription — a person in
+    // the Stripe dashboard, usually. Handing a non-ObjectId straight to
+    // `findById` throws a CastError, which becomes a 500, which Stripe retries
+    // for three days while every other event queues behind it. A value that
+    // cannot be an id is an unknown tenant, not an outage.
+    if (mongoose.Types.ObjectId.isValid(fromMeta)) return fromMeta;
+    console.error(
+      `[billing] subscription ${sub.id} carries businessId="${fromMeta}", which is not a valid id. ` +
+        'Falling back to the customer.'
+    );
+  }
+
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
   if (!customerId) return null;
-  const biz = await Business.findOne({ 'subscription.stripeCustomerId': customerId }).select('_id');
-  return biz ? biz._id.toString() : null;
+
+  const stored = await Business.findOne({ 'subscription.stripeCustomerId': customerId }).select('_id');
+  if (stored) return stored._id.toString();
+
+  // Everything below needs the customer object, which the event carries only as
+  // an id. A Stripe outage here must not fail the event: it would be retried
+  // for days against a lookup that was never going to be the answer.
+  if (!stripe) return null;
+  const customer = await stripe.customers.retrieve(customerId).catch(() => null);
+  if (!customer || customer.deleted) return null;
+
+  const metaId = customer.metadata?.businessId;
+  if (metaId) return metaId;
+
+  const email = customer.email?.trim().toLowerCase();
+  if (!email) return null;
+  // `user.email` is unique, so this cannot match two tenants. `businessId` is a
+  // string in the better-auth collection — see the type note in CLAUDE.md.
+  const owner = await mongoose.connection
+    .collection('user')
+    .findOne({ email }, { projection: { businessId: 1 } });
+  return owner?.businessId ? String(owner.businessId) : null;
 }
 
 async function applySubscription(sub: Stripe.Subscription): Promise<void> {

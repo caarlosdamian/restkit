@@ -2,7 +2,7 @@ import { PKPass } from 'passkit-generator';
 import sharp from 'sharp';
 import { solidColorPNG } from './png';
 import { loyaltyConfig, stampState, formatMXN } from './loyalty';
-import { buildCardLayout, fillTokens } from './card-layout';
+import { buildCardLayout, fillTokens, withoutChangeMessages } from './card-layout';
 import { groundFor, readableInk, relLuminance } from './card-colors';
 import { renderStripVariants } from './strip-render';
 import { findStampIcon } from './stamp-icons';
@@ -119,9 +119,23 @@ export function passLocations(
   };
 }
 
+export interface ApplePassOptions {
+  /**
+   * Update the installed pass without telling the customer.
+   *
+   * For a decrease — a manager removing a purchase that was rung up twice.
+   * The card must still become correct, but "Llevas 4 de 10" on a lock screen
+   * is a question nobody behind the counter can answer. Before this existed the
+   * only way to stay quiet was to skip the push, which left the iPhone showing
+   * a stamp the customer no longer had, indefinitely: a storeCard never polls.
+   */
+  silent?: boolean;
+}
+
 export async function generateApplePass(
   customer: ICustomer,
-  business: IBusiness
+  business: IBusiness,
+  options: ApplePassOptions = {}
 ): Promise<Buffer> {
   const passTypeId = process.env.APPLE_PASS_TYPE_IDENTIFIER;
   const teamId = process.env.APPLE_TEAM_ID;
@@ -180,6 +194,16 @@ export async function generateApplePass(
     config.card.fields
   );
 
+  // A silent update ships the same values with none of the announcements.
+  const fields = options.silent
+    ? {
+        header: withoutChangeMessages(layout.header),
+        secondary: withoutChangeMessages(layout.secondary),
+        auxiliary: withoutChangeMessages(layout.auxiliary),
+        back: withoutChangeMessages(layout.back),
+      }
+    : layout;
+
   const [logoVariants, stripVariants, icons] = await Promise.all([
     business.branding?.logo ? fetchLogoVariants(business.branding.logo) : Promise.resolve(null),
     renderStripVariants({
@@ -209,14 +233,14 @@ export async function generateApplePass(
     webServiceURL: `${base}/api/wallet/apple`,
     authenticationToken: authToken,
     storeCard: {
-      headerFields: layout.header,
+      headerFields: fields.header,
       // EMPTY ON PURPOSE. Wallet draws primaryFields on top of strip.png, and
       // strip.png is the stamp card — a populated primary slot reprints the
       // progress across the customer's own stamps.
       primaryFields: [],
-      secondaryFields: layout.secondary,
-      auxiliaryFields: layout.auxiliary,
-      backFields: layout.back,
+      secondaryFields: fields.secondary,
+      auxiliaryFields: fields.auxiliary,
+      backFields: fields.back,
     },
     barcodes: [
       {

@@ -122,6 +122,26 @@ export function changeMessageFrom(template: string, fallback: string): string {
     : collapsed;
 }
 
+/**
+ * The same fields, with every `changeMessage` removed.
+ *
+ * ⚠️ This is the ONLY lever over whether an Apple update is announced. A push
+ * to a pass carries no payload — it just tells the device to re-fetch — so
+ * Apple decides by diffing the pass it gets against the one installed, and
+ * raises a notification for each changed field that carries a message. Strip
+ * them and the card still updates, in total silence.
+ *
+ * Which is exactly what a decrease needs. A manager removing a purchase rung up
+ * twice must leave the customer's card correct, but "Llevas 4 de 10" on a lock
+ * screen is a question nobody behind the counter can answer. The alternative
+ * used to be skipping the push altogether — quiet, but the iPhone then kept
+ * showing a stamp that no longer existed, because a storeCard never polls.
+ */
+export function withoutChangeMessages(fields: CardField[]): CardField[] {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return fields.map(({ changeMessage, ...rest }) => rest);
+}
+
 /* ---------------------------------------------------------------- values */
 
 function monthYear(date?: Date | string): string {
